@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_library(statviz_core STATIC src/families.cpp src/params.cpp)
+add_library(statviz_core STATIC src/expr.cpp src/families.cpp src/params.cpp)
 target_include_directories(statviz_core PUBLIC include)
 target_compile_options(statviz_core PRIVATE -Wall -Wextra -Wpedantic)
 if(EMSCRIPTEN)
@@ -19,7 +19,7 @@ endif()
 # Tests run natively, and under node for the WebAssembly build
 # (Emscripten's toolchain sets CMAKE_CROSSCOMPILING_EMULATOR).
 enable_testing()
-add_executable(statviz_tests tests/main.cpp tests/test_cf.cpp tests/test_families.cpp tests/test_params.cpp)
+add_executable(statviz_tests tests/main.cpp tests/test_cf.cpp tests/test_expr.cpp tests/test_families.cpp tests/test_params.cpp)
 target_link_libraries(statviz_tests PRIVATE statviz_core)
 target_include_directories(statviz_tests SYSTEM PRIVATE third_party/doctest)
 add_test(NAME statviz_tests COMMAND statviz_tests)
