@@ -107,6 +107,10 @@ input.range { width: 8.5rem; padding: 0; accent-color: var(--accent); }
 input.color { width: 2.4rem; height: 1.6rem; padding: 0.05rem; }
 label.check { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--fg); }
 
+.progress-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.3rem 0; }
+.progress-row progress { flex: 1; min-width: 4rem; height: 0.5rem; accent-color: var(--accent); }
+.progress-text { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+
 button { cursor: pointer; }
 button:disabled { opacity: 0.4; cursor: default; }
 button.small { font-size: 0.85rem; padding: 0.05rem 0.45rem; }

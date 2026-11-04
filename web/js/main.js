@@ -67,6 +67,11 @@ async function main() {
       store.set('family', key);
       store.set('exprs', familyExprs.get(key) ?? family.params.map((p) => String(p.default)));
     },
+    toggleRender() {
+      const p = renderer.progress;
+      if (p) renderer.pause(!p.paused);
+      requestDraw();
+    },
     clearTrail() {
       if (store.state.mode !== 'scrub') return;
       renderer.scrub.reset();
@@ -84,8 +89,9 @@ async function main() {
   function draw() {
     frame = 0;
     const s = store.state;
-    const { drawn, limited, busy } = renderer.draw(s, canvas.width, canvas.height);
+    const busy = renderer.draw(s, canvas.width, canvas.height);
     if (busy) requestDraw();
+    info.progress = s.mode === 'render' ? renderer.progress : null;
     const total = engine.gridSize();
     if (s.mode === 'scrub') {
       const keys = engine.scrubSize();
@@ -93,8 +99,7 @@ async function main() {
         : `${keys.toLocaleString()} slider state${keys === 1 ? '' : 's'} in the trail` + (busy ? ' · redrawing…' : '');
     } else if (s.mode === 'render') {
       info.status = `${total.toLocaleString()} curves × ${s.t.n.toLocaleString()} samples`
-        + (info.stats && info.stats.valid < Math.min(total, engine.maxCurves) ? ` · ${(Math.min(total, engine.maxCurves) - info.stats.valid).toLocaleString()} skipped` : '')
-        + (limited ? ` · drawing the first ${drawn.toLocaleString()}` : '');
+        + (info.stats && info.stats.valid < Math.min(total, engine.maxCurves) ? ` · ${(Math.min(total, engine.maxCurves) - info.stats.valid).toLocaleString()} skipped` : '');
     }
     panel.update(s, info);
   }

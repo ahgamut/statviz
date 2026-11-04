@@ -16,6 +16,7 @@ export async function createEvaluator(gl, { maxPoints = 1 << 22 } = {}) {
   const buffer = gl.createBuffer();
   const texture = gl.createTexture();
   let rows = 0;
+  let tag = null;
 
   function reserve(n) {
     if (n > capacity) throw new Error(`${n} points exceed the evaluator capacity ${capacity}`);
@@ -42,9 +43,14 @@ export async function createEvaluator(gl, { maxPoints = 1 << 22 } = {}) {
     capacity,
     texture,  // point i at (i % width, i / width)
 
+    // Set by the last evaluate: lets a caller tell whether its points are
+    // still in the texture.
+    get tag() { return tag; },
+
     // Curves [first, first + count) of params -> points [0, count * samples).
-    evaluate(params, family, first, count, { t0, t1, samples }) {
+    evaluate(params, family, first, count, { t0, t1, samples }, newTag = null) {
       const n = count * samples;
+      tag = newTag;
       if (!n) return;
       reserve(n);
       gl.useProgram(program);
@@ -71,6 +77,7 @@ export async function createEvaluator(gl, { maxPoints = 1 << 22 } = {}) {
 
     // CPU path: n (Re, Im) points from engine.pointsGrid / pointsScrub.
     upload(data, n) {
+      tag = null;
       if (!n) return;
       reserve(n);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);

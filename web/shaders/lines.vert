@@ -4,6 +4,7 @@
 #include "curve_data.glsl"
 
 uniform int u_first;      // first curve in u_params
+uniform int u_offset;     // its first point is at u_offset * u_samples
 uniform int u_samples;
 uniform vec4 u_view;      // clip = (z - u_view.xy) * u_view.zw
 uniform vec2 u_viewport;  // px
@@ -24,7 +25,7 @@ vec2 normal_of(vec2 d, vec2 fallback) {
 
 void main() {
     int segs = u_samples - 1;
-    int curve = gl_InstanceID / segs, j = gl_InstanceID % segs, base = curve * u_samples;
+    int curve = gl_InstanceID / segs, j = gl_InstanceID % segs, base = (u_offset + curve) * u_samples;
     vec4 q = curve_texel(u_first + curve, 1);
     vec2 z0 = point_at(base + j), z1 = point_at(base + j + 1);
     vec2 p0 = to_px(z0), p1 = to_px(z1);

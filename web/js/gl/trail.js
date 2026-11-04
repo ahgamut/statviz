@@ -1,5 +1,6 @@
-// Offscreen accumulation targets for scrub trails, plus drawing them to the
-// screen under a different view than they were rendered with.
+// Offscreen accumulation targets (scrub trails, Render mode, exports), plus
+// drawing them to the screen under a different view than they were rendered
+// with. key and content describe what a target holds; clear() resets them.
 import { loadProgram, uniforms, shaderUrl } from './util.js';
 
 export async function createTrailTools(gl) {
@@ -16,7 +17,7 @@ export async function createTrailTools(gl) {
   function createTarget() {
     const tex = gl.createTexture(), fbo = gl.createFramebuffer();
     const target = {
-      w: 0, h: 0, view: null,
+      w: 0, h: 0, view: null, key: null, content: null,
       resize(w, h) {
         if (w === target.w && h === target.h) return;
         target.w = w; target.h = h;
@@ -34,6 +35,7 @@ export async function createTrailTools(gl) {
         gl.viewport(0, 0, target.w, target.h);
       },
       clear() {
+        target.key = target.content = null;
         target.bind();
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -48,6 +50,10 @@ export async function createTrailTools(gl) {
         gl.blendFunc(gl.ZERO, gl.CONSTANT_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.bindVertexArray(null);
+      },
+      dispose() {
+        gl.deleteFramebuffer(fbo);
+        gl.deleteTexture(tex);
       },
       texture: tex,
     };

@@ -94,6 +94,20 @@ export function createPanel(root, { meta, store, actions }) {
     row('', trailMode.el), halfLifeRow,
     row('', h('button.small', { type: 'button', on: { click: () => actions.clearTrail() } }, 'Clear (C)')));
 
+  // Render progress
+  const renderBar = h('progress', { max: 1, value: 0 });
+  const renderText = h('span.progress-text');
+  const renderButton = h('button.small', { type: 'button',
+    on: { click: () => actions.toggleRender() } });
+  const renderSection = section('Render', h('div.progress-row', {}, renderBar, renderText, renderButton));
+  const updateRender = (p) => {
+    renderBar.value = p ? p.done / Math.max(1, p.total) : 1;
+    renderText.textContent = !p ? 'done'
+      : `${p.done.toLocaleString()} / ${p.total.toLocaleString()} curves` + (p.paused ? ' · stopped' : '');
+    renderButton.hidden = !p;
+    renderButton.textContent = p?.paused ? 'Continue' : 'Stop';
+  };
+
   // Style
   const colorBy = select(store, 'style.colorBy', [['u', 'u'], ['v', 'v'], ['t', 't'], ['abs', '|φ|'], ['arg', 'arg φ']]);
   const cmap = select(store, 'style.colormap', COLORMAP_NAMES.map((n) => [n, n]));
@@ -115,6 +129,7 @@ export function createPanel(root, { meta, store, actions }) {
     section('Variables', sweepRow('u'), sweepRow('v'), SLIDER_VARS.map(varRow), noVars,
       row('t', t0.el, h('span.sep', {}, '–'), t1.el, twoPi), row('samples', tn.el)),
     trailSection,
+    renderSection,
     section('Style',
       row('colour by', colorBy.el), row('colormap', cmap.el, reverse.el), stopsRow,
       row('width', width.el, h('span.unit', {}, '‰')), row('opacity', opacity.el), row('blend', blend.el),
@@ -147,6 +162,8 @@ export function createPanel(root, { meta, store, actions }) {
       noVars.hidden = info.varsUsed.size > 0;
       t0.update(s.t.lo); t1.update(s.t.hi); tn.update(s.t.n);
       trailSection.hidden = s.mode !== 'scrub';
+      renderSection.hidden = s.mode !== 'render';
+      updateRender(info.progress);
       trailMode.update(s.trail.mode);
       halfLifeRow.hidden = s.trail.mode !== 'fade';
       halfLife.update(s.trail.halfLife);

@@ -1,4 +1,6 @@
 // Frame composition: background, overlay, then the curves of the current mode.
+// Render mode draws the grid into an offscreen target a slice per frame;
+// while a view change is redrawn, the previous image is shown warped.
 import { createColormaps } from './gl/colormap.js';
 import { createEvaluator } from './gl/evaluate.js';
 import { createLines } from './gl/lines.js';
@@ -7,8 +9,9 @@ import { createParams } from './gl/params.js';
 import { createTrailTools } from './gl/trail.js';
 import { createScrub } from './scrub.js';
 
-export const SCALE = 0.9;              // unit disk radius in clip space at zoom 1
-const MAX_DRAW_POINTS = 64 * 2 ** 20;  // per frame, across batches
+export const SCALE = 0.9;        // unit disk radius in clip space at zoom 1
+const DRAW_CHUNK = 1 << 20;      // points per lines.draw call
+const BUDGET = [1 << 18, 1 << 22, 1 << 26];  // points per frame: min, start, max
 
 export const hexColor = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 
@@ -24,7 +27,10 @@ export async function createRenderer(gl, engine) {
     createLines(gl, colormaps), createOverlay(gl), createEvaluator(gl), createTrailTools(gl),
   ]);
   const params = createParams(gl);
-  const grid = { family: 0, total: 0, slab: -1, evaluated: false, T: null };
+  const grid = { family: 0, total: 0, slab: -1, version: 0 };
+  const targets = { front: trails.createTarget(), back: trails.createTarget() };
+  const budget = createBudget();
+  let job = null;  // Render mode: {key, content, curves, progress, paused}
 
   const lineStyle = (style, w, h) => ({ ...style, width: (style.width * Math.min(w, h)) / 1000 });
 
@@ -45,36 +51,78 @@ export async function createRenderer(gl, engine) {
     if (state.style.overlay) overlay.draw({ view: viewTransform(state.view, w, h) });
   }
 
-  function drawGrid(state, w, h) {
-    const T = { t0: state.t.lo, t1: state.t.hi, samples: state.t.n };
+  function loadSlab(slab) {
+    if (grid.slab === slab) return;
+    const { data, stats } = engine.buildGrid(slab, Math.min(engine.maxCurves, grid.total - slab));
+    params.set(data, stats.curves);
+    grid.slab = slab;
+  }
+
+  // Draws every grid curve into target (under target.view), yielding the
+  // points drawn per call. Evaluated points are reused while still valid.
+  function* gridCurves(s, target, progress = {}) {
+    const T = { t0: s.t.lo, t1: s.t.hi, samples: s.t.n };
     const perEval = Math.floor(evaluator.capacity / T.samples);
-    const total = Math.min(grid.total, Math.floor(MAX_DRAW_POINTS / T.samples));
-    const single = total <= engine.maxCurves && total <= perEval;
-    const view = viewTransform(state.view, w, h);
-    const style = lineStyle(state.style, w, h);
-    blend(state.style.blend);
+    const chunk = Math.max(1, Math.floor(DRAW_CHUNK / T.samples));
+    const style = lineStyle(s.style, target.w, target.h);
+    const total = grid.total, version = grid.version;
+    progress.done = 0;
+    progress.total = total;
     for (let slab = 0; slab < total; slab += engine.maxCurves) {
       const n = Math.min(engine.maxCurves, total - slab);
-      if (grid.slab !== slab) {
-        const { data, stats } = engine.buildGrid(slab, n);
-        params.set(data, stats.curves);
-        grid.slab = slab;
-        grid.evaluated = false;
-      }
       for (let c = 0; c < n; c += perEval) {
-        const m = Math.min(perEval, n - c);
-        if (!(single && grid.evaluated)) evaluator.evaluate(params, grid.family, c, m, T);
-        lines.draw({ params, points: evaluator.texture, first: c, count: m, samples: T.samples,
-          view, viewport: [w, h], style });
+        const m = Math.min(perEval, n - c), tag = JSON.stringify(['grid', version, slab, c, T]);
+        for (let d = 0; d < m; d += chunk) {
+          if (grid.version !== version) throw new Error('the scene changed while drawing');
+          loadSlab(slab);
+          if (evaluator.tag !== tag) evaluator.evaluate(params, grid.family, c, m, T, tag);
+          const k = Math.min(chunk, m - d);
+          target.bind();
+          blend(s.style.blend);
+          lines.draw({ params, points: evaluator.texture, first: c + d, offset: d, count: k,
+            samples: T.samples, view: target.view, viewport: [target.w, target.h], style });
+          progress.done = slab + c + d + k;
+          yield k * T.samples;
+        }
       }
-      grid.evaluated = true;
-      if (!single) grid.slab = -1;
     }
-    return total;
+  }
+
+  function drawRender(s, w, h) {
+    const { background, overlay: _, ...look } = s.style;  // not part of the target
+    const content = JSON.stringify([grid.version, look, s.t]);
+    const key = JSON.stringify([content, s.view, w, h]);
+    if (targets.front.key !== key && job?.key !== key) {
+      const { back } = targets;
+      back.resize(w, h);
+      back.clear();
+      back.view = viewTransform(s.view, w, h);
+      const progress = { done: 0, total: grid.total };
+      job = { key, content, progress, paused: false, curves: gridCurves(s, back, progress) };
+    }
+    if (job && !job.paused) {
+      budget.frame();
+      if (run(job.curves, budget.points)) {
+        [targets.front, targets.back] = [targets.back, targets.front];
+        Object.assign(targets.front, { key: job.key, content: job.content });
+        job = null;
+        budget.idle();
+      }
+    }
+    // A redraw of the same content keeps showing the old image until done.
+    const { front, back } = targets;
+    const shown = !job ? front : front.key && front.content === job.content ? front : back;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, w, h);
+    if (shown === back || shown.key) {
+      blend(s.style.blend);
+      trails.composite(shown, viewTransform(s.view, w, h));
+    }
+    return !!job && !job.paused;
   }
 
   const scrub = createScrub(gl, engine, {
-    lines, evaluator, trails, lineStyle, blend, family: () => grid.family,
+    lines, evaluator, trails, targets, lineStyle, blend, family: () => grid.family,
   });
 
   return {
@@ -83,7 +131,7 @@ export async function createRenderer(gl, engine) {
 
     setFamily(family) {
       grid.family = family;
-      grid.evaluated = false;
+      grid.version++;
     },
 
     // After the engine's scene changed: rebuilds the grid's first slab and
@@ -91,25 +139,52 @@ export async function createRenderer(gl, engine) {
     setGrid(family) {
       grid.family = family;
       grid.total = engine.gridSize();
+      grid.version++;
       const { data, stats } = engine.buildGrid(0, Math.min(grid.total, engine.maxCurves));
       params.set(data, stats.curves);
       grid.slab = 0;
-      grid.evaluated = false;
       return stats;
     },
 
     // Points must be re-evaluated (t range changed) but params are still valid.
-    invalidatePoints() { grid.evaluated = false; },
+    invalidatePoints() { grid.version++; },
 
-    // Returns {drawn, limited} for the grid and busy while more frames are needed.
+    // Render mode progress: null when idle, else {done, total, paused}.
+    get progress() { return job && { ...job.progress, paused: job.paused }; },
+    pause(paused) { if (job) job.paused = paused; },
+
+    // Returns true while more frames are needed.
     draw(state, w, h) {
       clear(state, w, h);
-      if (state.mode === 'scrub') {
-        grid.evaluated = false;  // the evaluator's points are reused
-        return { busy: scrub.draw(state, w, h) };
-      }
-      const drawn = state.mode === 'render' ? drawGrid(state, w, h) : 0;
-      return { drawn, limited: drawn < grid.total, busy: false };
+      if (state.mode === 'scrub') return scrub.draw(state, w, h);
+      if (state.mode === 'render') return drawRender(state, w, h);
+      return false;
     },
+  };
+}
+
+// Runs a curve generator until it has drawn `points`; true once finished.
+function run(curves, points) {
+  for (let spent = 0; spent < points;) {
+    const r = curves.next();
+    if (r.done) return true;
+    spent += r.value;
+  }
+  return false;
+}
+
+// Points per frame, adapted to the frame interval (the GPU's pace shows up
+// as late animation frames).
+function createBudget() {
+  let points = BUDGET[1], last = 0;
+  return {
+    get points() { return points; },
+    frame() {
+      const now = performance.now(), dt = last ? now - last : 0;
+      last = now;
+      if (dt && dt < 24) points = Math.min(points * 1.25, BUDGET[2]);
+      else if (dt > 40) points = Math.max(points * 0.7, BUDGET[0]);
+    },
+    idle() { last = 0; },
   };
 }

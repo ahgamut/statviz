@@ -16,23 +16,23 @@ export const scrubVars = (s) => ({
   ...Object.fromEntries(Object.entries(s.vars).map(([k, x]) => [k, x.value])),
 });
 
-export function createScrub(gl, engine, { lines, evaluator, trails, family, lineStyle, blend }) {
+// targets: {front, back}, shared with Render mode.
+export function createScrub(gl, engine, { lines, evaluator, trails, targets, family, lineStyle, blend }) {
   const batch = createParams(gl), current = createParams(gl);
-  let front = trails.createTarget(), back = trails.createTarget();
   let fade = { pending: 1 };  // fade owed by the front target
-  let replay = null;          // {key, next, fade}
+  let replay = null;          // {key, curves, fade}
   let hasCurrent = false;
   let lastStats = null;
 
   const T = (s) => ({ t0: s.t.lo, t1: s.t.hi, samples: s.t.n });
-  const fadeK = (s) => (s.trail.mode === 'fade' ? 0.5 ** (1 / Math.max(1, s.trail.halfLife)) : 1);
+  // scale: px per preview px, so an export fades over the same distance.
+  const fadeK = (s, scale = 1) => (s.trail.mode === 'fade' ? 0.5 ** (1 / (Math.max(1, s.trail.halfLife) * scale)) : 1);
   // 1 px in unit-disk units.
   const maxStep = (view, w) => 2 / (view[2] * w);
   const settingsKey = (s, w, h) => JSON.stringify([s.view, w, h, s.style, s.trail]);
 
-  function drawCurves(target, owed, data, n, s, view) {
+  function drawCurves(target, owed, data, n, s, view, k = fadeK(s)) {
     if (!n) return;
-    const k = fadeK(s);
     owed.pending *= k ** n;
     if (owed.pending < FADE_CHUNK) {
       target.scale(owed.pending);
@@ -51,27 +51,38 @@ export function createScrub(gl, engine, { lines, evaluator, trails, family, line
     }
   }
 
+  // Draws the history into target (rendered under target.view) at 1 px of
+  // the target, yielding the points drawn per engine call. owed: fade state.
+  function* replayCurves(s, target, owed, { scale = 1, progress = {} } = {}) {
+    const t = T(s), step = maxStep(target.view, target.w), k = fadeK(s, scale);
+    const end = engine.scrubSize();
+    progress.total = end;
+    for (let next = 0; next < end;) {
+      const r = engine.scrubReplay(next, Math.min(end, next + REPLAY_KEYS), t, step);
+      drawCurves(target, owed, r.data, r.stats.curves, s, target.view, k);
+      progress.done = next = r.next;
+      yield r.stats.curves * t.samples;
+    }
+  }
+
   function startReplay(s, w, h, key) {
+    const { back } = targets;
     back.resize(w, h);
     back.clear();
     back.view = viewTransform(s.view, w, h);
-    replay = { key, next: 0, fade: { pending: 1 } };
+    const owed = { pending: 1 };
+    replay = { key, owed, curves: replayCurves(s, back, owed) };
   }
 
-  function stepReplay(s) {
-    const t0 = performance.now(), t = T(s);
-    const step = maxStep(back.view, back.w);
-    while (replay.next < engine.scrubSize() && performance.now() - t0 < BUDGET_MS) {
-      const k1 = Math.min(engine.scrubSize(), replay.next + REPLAY_KEYS);
-      const r = engine.scrubReplay(replay.next, k1, t, step);
-      drawCurves(back, replay.fade, r.data, r.stats.curves, s, back.view);
-      replay.next = r.next;
-    }
-    if (replay.next >= engine.scrubSize()) {
-      [front, back] = [back, front];
-      front.key = replay.key;
-      fade = replay.fade;
+  function stepReplay() {
+    const t0 = performance.now();
+    while (performance.now() - t0 < BUDGET_MS) {
+      if (!replay.curves.next().done) continue;
+      [targets.front, targets.back] = [targets.back, targets.front];
+      targets.front.key = replay.key;
+      fade = replay.owed;
       replay = null;
+      return;
     }
   }
 
@@ -80,9 +91,11 @@ export function createScrub(gl, engine, { lines, evaluator, trails, family, line
     get replaying() { return !!replay; },
 
     // History and trail are discarded (the scene changed).
+    replayCurves,
+
     reset() {
       engine.scrubClear();
-      front.key = null;
+      targets.front.key = null;
       replay = null;
       hasCurrent = false;
     },
@@ -97,8 +110,8 @@ export function createScrub(gl, engine, { lines, evaluator, trails, family, line
       lastStats = r.stats;
       current.set(r.data.subarray((n - 1) * engine.curveFloats), 1);
       hasCurrent = n > 0;
-      if (!refresh && !replay && front.key === settingsKey(s, w, h)) {
-        drawCurves(front, fade, r.data, n, s, view);
+      if (!refresh && !replay && targets.front.key === settingsKey(s, w, h)) {
+        drawCurves(targets.front, fade, r.data, n, s, view);
       }
     },
 
@@ -108,18 +121,18 @@ export function createScrub(gl, engine, { lines, evaluator, trails, family, line
       const refresh = s.trail.mode === 'refresh';
       if (!refresh) {
         const key = settingsKey(s, w, h);
-        if (front.key !== key && replay?.key !== key) startReplay(s, w, h, key);
-        if (replay) stepReplay(s);
+        if (targets.front.key !== key && replay?.key !== key) startReplay(s, w, h, key);
+        if (replay) stepReplay();
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
-        if (front.key) {
+        if (targets.front.key) {
           gl.enable(gl.BLEND);
           if (s.style.blend === 'add') gl.blendFunc(gl.ONE, gl.ONE);
           else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-          trails.composite(front, view);
+          trails.composite(targets.front, view);
         }
       }
-      if (hasCurrent && (refresh || replay || !front.key)) {
+      if (hasCurrent && (refresh || replay || !targets.front.key)) {
         const t = T(s);
         evaluator.evaluate(current, family(), 0, 1, t);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
