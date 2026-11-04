@@ -5,7 +5,7 @@ const SEGMENTS = 256;
 
 export async function createOverlay(gl) {
   const program = await loadProgram(gl, shader('overlay.vert'), shader('overlay.frag'));
-  const u = uniforms(gl, program, ['u_scale', 'u_color']);
+  const u = uniforms(gl, program, ['u_view', 'u_color']);
 
   const pts = [];
   for (let i = 0; i < SEGMENTS; i++) {
@@ -24,10 +24,10 @@ export async function createOverlay(gl) {
   gl.bindVertexArray(null);
 
   return {
-    draw({ scale }) {
+    draw({ view }) {
       gl.useProgram(program);
       gl.bindVertexArray(vao);
-      gl.uniform1f(u.u_scale, scale);
+      gl.uniform4fv(u.u_view, view);
       gl.uniform4f(u.u_color, 0.28, 0.3, 0.33, 1.0);
       gl.drawArrays(gl.LINE_LOOP, 0, SEGMENTS);
       gl.uniform4f(u.u_color, 0.17, 0.18, 0.2, 1.0);

@@ -1,8 +1,9 @@
 import { loadEngine } from './engine.js';
-import { createCurves } from './gl/curves.js';
+import { createColormaps } from './gl/colormap.js';
 import { createEvaluator } from './gl/evaluate.js';
-import { createParams } from './gl/params.js';
+import { createLines } from './gl/lines.js';
 import { createOverlay } from './gl/overlay.js';
+import { createParams } from './gl/params.js';
 
 const SCENE = {
   family: 'normal',
@@ -10,7 +11,8 @@ const SCENE = {
   u: { lo: 0, hi: 1, n: 12 },
   t0: 0, t1: 60, samples: 4000,
 };
-const SCALE = 0.9;  // unit disk radius in clip space
+const STYLE = { width: 1.5, opacity: 1, colorBy: 'u', colormap: 'magma', reverse: false };
+const SCALE = 0.9;  // unit disk radius in clip space at zoom 1
 
 function showError(err) {
   const el = document.getElementById('error');
@@ -28,33 +30,40 @@ function buildScene(engine) {
   });
   engine.setSweep('u', SCENE.u.lo, SCENE.u.hi, SCENE.u.n);
   engine.setSweep('v', 0, 0, 1);
-  return engine.buildGrid();
+  return { family: family.id, ...engine.buildGrid() };
 }
 
 async function main() {
   const canvas = document.getElementById('view');
-  const gl = canvas.getContext('webgl2', { antialias: true });
+  const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: true });
   if (!gl) throw new Error('WebGL2 is not available in this browser.');
 
-  const [engine, curves, overlay, evaluator] = await Promise.all([
+  const colormaps = createColormaps(gl);
+  const [engine, lines, overlay, evaluator] = await Promise.all([
     loadEngine(),
-    createCurves(gl),
+    createLines(gl, colormaps),
     createOverlay(gl),
     createEvaluator(gl),
   ]);
 
-  const { data, stats } = buildScene(engine);
+  const { family, data, stats } = buildScene(engine);
   const params = createParams(gl);
   params.set(data, stats.curves);
-  const family = engine.meta.families.find((f) => f.key === SCENE.family).id;
   evaluator.evaluate(params, family, 0, stats.curves, SCENE);
 
   const draw = () => {
-    gl.viewport(0, 0, canvas.width, canvas.height);
+    const w = canvas.width, h = canvas.height, s = Math.min(w, h);
+    const view = [0, 0, (SCALE * s) / w, (SCALE * s) / h];
+    gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    overlay.draw({ scale: SCALE });
-    curves.draw({ params, points: evaluator.texture, count: stats.curves, samples: SCENE.samples, scale: SCALE });
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    overlay.draw({ view });
+    lines.draw({
+      params, points: evaluator.texture, count: stats.curves, samples: SCENE.samples,
+      view, viewport: [w, h], style: { ...STYLE, width: (STYLE.width * s) / 1000 },
+    });
   };
 
   const resize = new ResizeObserver(([entry]) => {
