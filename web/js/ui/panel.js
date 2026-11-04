@@ -117,7 +117,6 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
   const stopsRow = row('stops', stops.map((c) => c.el));
   const width = numberInput(store, 'style.width', { min: 0.05, max: 100, step: 0.1, title: 'px per 1000 px of image' });
   const opacity = numberInput(store, 'style.opacity', { min: 0, max: 1, step: 0.05 });
-  const blend = segmented(store, 'style.blend', [['over', 'Over'], ['add', 'Add', 'Additive: overlaps get brighter']]);
   const repN = numberInput(store, 'style.repeat.n', { integer: true, min: 1, max: MAX_REPEAT, title: 'copies, including the original' });
   const repAngle = numberInput(store, 'style.repeat.angle', { min: 0, max: 2 * Math.PI, step: 0.01, wide: true,
     title: 'Turn between copies, radians; 0 keeps the image as is' });
@@ -170,7 +169,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
     renderSection,
     section('Style',
       row('colour by', colorBy.el), row('colormap', cmap.el, reverse.el), stopsRow,
-      row('width', width.el, h('span.unit', {}, '‰')), row('opacity', opacity.el), row('blend', blend.el),
+      row('width', width.el, h('span.unit', {}, '‰')), row('opacity', opacity.el),
       row('repeat', repN.el, h('span.times', {}, '×'), repAngle.el, h('span.unit', {}, 'rad'), evenly),
       row('background', background.el), row('', overlay.el)),
     section('Export',
@@ -214,7 +213,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
       colorBy.update(s.style.colorBy); cmap.update(s.style.colormap); reverse.update(s.style.reverse);
       stopsRow.hidden = s.style.colormap !== 'custom';
       stops.forEach((c, i) => c.update(s.style.custom[i]));
-      width.update(s.style.width); opacity.update(s.style.opacity); blend.update(s.style.blend);
+      width.update(s.style.width); opacity.update(s.style.opacity);
       repN.update(s.style.repeat.n); repAngle.update(s.style.repeat.angle);
       background.update(s.style.background); overlay.update(s.style.overlay);
       updateExport(s, info.export);
