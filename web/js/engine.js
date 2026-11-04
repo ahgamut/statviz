@@ -63,11 +63,46 @@ export async function loadEngine() {
 
     // {data: Float32Array of count * curveFloats, stats: {curves, valid, bad[]}}
     buildGrid(first = 0, count = m._sv_grid_size() - first) {
-      const ptr = m._sv_build_grid(first, count);
-      const data = m.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + count * curveFloats);
-      const sp = m._sv_stats() >> 2;
-      const s = m.HEAP32.subarray(sp, sp + 2 + meta.maxParams);
-      return { data, stats: { curves: s[0], valid: s[1], bad: Array.from(s.subarray(2)) } };
+      m._sv_build_grid(first, count);
+      return built(count);
+    },
+
+    // Scrub mode. state: {u, v, a, b, c, d, R} (missing names are 0).
+    // maxStep: largest allowed gap between neighbouring curves, in unit-disk units.
+    // Returns the curves leading from the previous key to this one, plus
+    // keys[i]: the key index each curve belongs to.
+    scrubPush(state, { t0, t1, samples }, maxStep) {
+      const sp = m._sv_state() >> 3;
+      meta.vars.forEach((name, i) => { m.HEAPF64[sp + i] = state[name] ?? 0; });
+      const n = m._sv_scrub_push(t0, t1, samples, maxStep);
+      return { ...built(n), keys: curveKeys(n) };
+    },
+
+    // Rebuilds keys [k0, k1) at a different maxStep (e.g. export resolution).
+    scrubReplay(k0, k1, { t0, t1, samples }, maxStep) {
+      const n = m._sv_scrub_replay(k0, k1, t0, t1, samples, maxStep);
+      return { ...built(n), keys: curveKeys(n) };
+    },
+
+    scrubClear() {
+      m._sv_scrub_clear();
+    },
+
+    scrubSize() {
+      return m._sv_scrub_size();
     },
   };
+
+  function built(count) {
+    const p = m._sv_curves() >> 2;
+    const data = m.HEAPF32.subarray(p, p + count * curveFloats);
+    const sp = m._sv_stats() >> 2;
+    const s = m.HEAP32.subarray(sp, sp + 2 + meta.maxParams);
+    return { data, stats: { curves: s[0], valid: s[1], bad: Array.from(s.subarray(2)) } };
+  }
+
+  function curveKeys(count) {
+    const p = m._sv_scrub_curve_keys() >> 2;
+    return m.HEAP32.subarray(p, p + count);
+  }
 }

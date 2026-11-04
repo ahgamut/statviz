@@ -10,6 +10,7 @@
 
 #include "statviz/meta.hpp"
 #include "statviz/scene.hpp"
+#include "statviz/scrub.hpp"
 
 #define SV_API extern "C" EMSCRIPTEN_KEEPALIVE
 
@@ -20,6 +21,22 @@ sv::expr::Error g_error;
 std::vector<float> g_curves;
 int g_stats[2 + sv::kMaxParams];
 std::string g_meta;
+double g_state[sv::expr::kNumVars];
+sv::ScrubHistory g_history;
+sv::Interpolated g_interp;
+
+void set_stats(const sv::BuildStats& st) {
+    g_stats[0] = st.curves;
+    g_stats[1] = st.valid;
+    for (int i = 0; i < sv::kMaxParams; ++i) g_stats[2 + i] = st.bad[i];
+}
+
+int build_interp() {
+    int n = static_cast<int>(g_interp.states.size());
+    g_curves.resize(static_cast<size_t>(std::max(n, 1)) * sv::kCurveFloats);
+    set_stats(g_scene.build_list(g_interp.states.data(), n, g_curves.data()));
+    return n;
+}
 }  // namespace
 
 SV_API char* sv_scratch(int nbytes) {
@@ -66,12 +83,37 @@ SV_API float* sv_build_grid(int first, int count) {
     first = std::clamp(first, 0, n);
     count = std::clamp(count, 0, n - first);
     g_curves.resize(static_cast<size_t>(std::max(count, 1)) * sv::kCurveFloats);
-    sv::BuildStats st = g_scene.build_grid(first, count, g_curves.data());
-    g_stats[0] = st.curves;
-    g_stats[1] = st.valid;
-    for (int i = 0; i < sv::kMaxParams; ++i) g_stats[2 + i] = st.bad[i];
+    set_stats(g_scene.build_grid(first, count, g_curves.data()));
     return g_curves.data();
 }
 
+// Curve data of the last build (grid, scrub push or replay).
+SV_API float* sv_curves() { return g_curves.data(); }
+
 // Stats of the last build: curves, valid, then out-of-domain counts per param.
 SV_API const int* sv_stats() { return g_stats; }
+
+// JS writes a state (u v a b c d R) here before sv_scrub_push.
+SV_API double* sv_state() { return g_state; }
+
+SV_API void sv_scrub_clear() { g_history.clear(); }
+SV_API int sv_scrub_size() { return g_history.size(); }
+
+// Appends the state as a key and builds the curves leading to it, at most
+// max_step apart in unit-disk units. Returns the number of curves.
+SV_API int sv_scrub_push(double t0, double t1, int m, double max_step) {
+    sv::State key;
+    std::copy(g_state, g_state + sv::expr::kNumVars, key.begin());
+    g_history.push(g_scene, key, {t0, t1, m}, max_step, g_interp);
+    return build_interp();
+}
+
+// Rebuilds the curves for keys [k0, k1) at a new max_step.
+SV_API int sv_scrub_replay(int k0, int k1, double t0, double t1, int m, double max_step) {
+    g_interp.clear();
+    g_history.replay(g_scene, k0, k1, {t0, t1, m}, max_step, g_interp);
+    return build_interp();
+}
+
+// Key index of each curve from the last push or replay.
+SV_API const int* sv_scrub_curve_keys() { return g_interp.keys.data(); }
