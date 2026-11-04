@@ -174,11 +174,6 @@ export async function createRenderer(gl, engine) {
         image.resize(w, h);
         image.clear();
         image.view = viewTransform(s.view, w, h);
-        if (circle) {
-          gl.enable(gl.BLEND);
-          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-          overlay.draw({ view: image.view, axes: false });
-        }
         const scale = Math.min(w, h) / Math.min(...preview);
         const curves = s.mode === 'render' ? gridCurves(s, image, progress)
           : s.mode === 'scrub' ? scrub.replayCurves(s, image, { pending: 1 }, { scale, progress })
@@ -191,6 +186,14 @@ export async function createRenderer(gl, engine) {
           const done = run(curves, pace.points);
           onProgress?.(progress);
           if (done) break;
+        }
+        // The circle goes in last, under the curves, so a Scrub fade doesn't dim it.
+        if (circle) {
+          image.bind();
+          gl.enable(gl.BLEND);
+          if (s.style.blend === 'add') gl.blendFunc(gl.ONE, gl.ONE);
+          else gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.ONE);
+          overlay.draw({ view: image.view, axes: false });
         }
 
         gl.bindTexture(gl.TEXTURE_2D, out);
