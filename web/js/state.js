@@ -27,12 +27,12 @@ export function defaultState() {
       colormap: 'magma',
       reverse: false,
       custom: ['#1b1f3a', '#e85d75', '#ffd166'],
-      background: '#0d0e10',
+      background: '#ffffff',
       overlay: true,
       repeat: { n: 1, angle: 0 },  // copies turned by angle (radians); angle 0 draws one
     },
     view: { cx: 0, cy: 0, zoom: 1 },
-    export: { w: 2048, h: 2048, transparent: true, circle: false },
+    export: { w: 2048, h: 2048, transparent: false, circle: true },
   };
 }
 

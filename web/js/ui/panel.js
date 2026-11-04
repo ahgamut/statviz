@@ -89,7 +89,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
     ['keep', 'Keep', 'Keep every curve as a swept band'],
     ['fade', 'Fade', 'Older curves fade with distance dragged'],
   ]);
-  const halfLife = numberInput(store, 'trail.halfLife', { min: 1, max: 100000, title: 'px of travel' });
+  const halfLife = numberInput(store, 'trail.halfLife', { min: 1, max: 100000, title: 'px of travel', wide: true });
   const halfLifeRow = row('half-life', halfLife.el, h('span.unit', {}, 'px'));
   const trailSection = section('Trail',
     row('', trailMode.el), halfLifeRow,
@@ -115,8 +115,8 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
   const reverse = checkbox(store, 'style.reverse', 'reverse');
   const stops = [0, 1, 2].map((i) => colorInput(store, `style.custom.${i}`));
   const stopsRow = row('stops', stops.map((c) => c.el));
-  const width = numberInput(store, 'style.width', { min: 0.05, max: 100, step: 0.1, title: 'px per 1000 px of image' });
-  const opacity = numberInput(store, 'style.opacity', { min: 0, max: 1, step: 0.05 });
+  const width = numberInput(store, 'style.width', { min: 0.05, max: 100, step: 0.1, title: 'px per 1000 px of image', wide: true });
+  const opacity = numberInput(store, 'style.opacity', { min: 0, max: 1, step: 0.05, wide: true });
   const repN = numberInput(store, 'style.repeat.n', { integer: true, min: 1, max: MAX_REPEAT, title: 'copies, including the original' });
   const repAngle = numberInput(store, 'style.repeat.angle', { min: 0, max: 2 * Math.PI, step: 0.01, wide: true,
     title: 'Turn between copies, radians; 0 keeps the image as is' });

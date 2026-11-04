@@ -134,7 +134,7 @@ button.small { font-size: 0.85rem; padding: 0.05rem 0.45rem; }
 .segmented .seg:last-child { border-radius: 0 4px 4px 0; }
 .segmented .seg.on { background: var(--accent); border-color: var(--accent); color: #111; }
 
-.formula { margin: 0.5rem 0 0.2rem; min-height: 1.6rem; overflow-x: auto; font-size: 0.95rem; }
+.formula { margin: 0.5rem 0 0.2rem; padding: 0.35rem 0; min-height: 2.4rem; overflow-x: auto; overflow-y: hidden; font-size: 0.95rem; }
 
 .param { display: grid; grid-template-columns: 2.4rem 1fr; align-items: center; gap: 0.1rem 0.35rem; margin: 0.35rem 0; }
 .sym { font-family: serif; font-size: 1.1rem; text-align: right; }
