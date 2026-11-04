@@ -39,3 +39,8 @@ if(EMSCRIPTEN)
     -sINITIAL_MEMORY=64MB
     -sEXPORTED_RUNTIME_METHODS=HEAPF32)
 endif()
+
+if(NOT EMSCRIPTEN)
+  add_executable(cf_dump tools/cf_dump.cpp)
+  target_link_libraries(cf_dump PRIVATE statviz_core)
+endif()
