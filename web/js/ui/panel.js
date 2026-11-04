@@ -1,5 +1,6 @@
 // Sidebar: built once from the engine metadata; update(state, info) refreshes it.
 import { COLORMAP_NAMES } from '../gl/colormap.js';
+import { MAX_REPEAT } from '../gl/lines.js';
 import { SLIDER_VARS } from '../state.js';
 import { checkbox, colorInput, exprInput, numberInput, segmented, select, slider } from './controls.js';
 import { h } from './dom.js';
@@ -117,6 +118,11 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
   const width = numberInput(store, 'style.width', { min: 0.05, max: 100, step: 0.1, title: 'px per 1000 px of image' });
   const opacity = numberInput(store, 'style.opacity', { min: 0, max: 1, step: 0.05 });
   const blend = segmented(store, 'style.blend', [['over', 'Over'], ['add', 'Add', 'Additive: overlaps get brighter']]);
+  const repN = numberInput(store, 'style.repeat.n', { integer: true, min: 1, max: MAX_REPEAT, title: 'copies, including the original' });
+  const repAngle = numberInput(store, 'style.repeat.angle', { min: 0, max: 2 * Math.PI, step: 0.01, wide: true,
+    title: 'Turn between copies, radians; 0 keeps the image as is' });
+  const evenly = h('button.small', { type: 'button', title: 'Spread the copies evenly around the circle',
+    on: { click: () => store.set('style.repeat.angle', +(2 * Math.PI / store.state.style.repeat.n).toFixed(6)) } }, '2π/n');
   const background = colorInput(store, 'style.background');
   const overlay = checkbox(store, 'style.overlay', 'unit circle and axes');
 
@@ -165,6 +171,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
     section('Style',
       row('colour by', colorBy.el), row('colormap', cmap.el, reverse.el), stopsRow,
       row('width', width.el, h('span.unit', {}, '‰')), row('opacity', opacity.el), row('blend', blend.el),
+      row('repeat', repN.el, h('span.times', {}, '×'), repAngle.el, h('span.unit', {}, 'rad'), evenly),
       row('background', background.el), row('', overlay.el)),
     section('Export',
       row('size', ew.el, h('span.times', {}, '×'), eh.el, h('span.unit', {}, 'px')),
@@ -208,6 +215,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
       stopsRow.hidden = s.style.colormap !== 'custom';
       stops.forEach((c, i) => c.update(s.style.custom[i]));
       width.update(s.style.width); opacity.update(s.style.opacity); blend.update(s.style.blend);
+      repN.update(s.style.repeat.n); repAngle.update(s.style.repeat.angle);
       background.update(s.style.background); overlay.update(s.style.overlay);
       updateExport(s, info.export);
       status.textContent = info.status ?? '';

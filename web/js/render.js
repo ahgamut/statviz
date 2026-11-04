@@ -3,7 +3,7 @@
 // while a view change is redrawn, the previous image is shown warped.
 import { createColormaps } from './gl/colormap.js';
 import { createEvaluator } from './gl/evaluate.js';
-import { createLines } from './gl/lines.js';
+import { createLines, repeats } from './gl/lines.js';
 import { createOverlay } from './gl/overlay.js';
 import { createParams } from './gl/params.js';
 import { createTrailTools } from './gl/trail.js';
@@ -11,7 +11,7 @@ import { createScrub } from './scrub.js';
 
 export const SCALE = 0.9;        // unit disk radius in clip space at zoom 1
 export const MAX_EXPORT = 2048;  // px per side
-const DRAW_CHUNK = 1 << 20;      // points per lines.draw call
+const DRAW_CHUNK = 1 << 20;      // points per lines.draw call, counting repeats
 const BUDGET = [1 << 18, 1 << 22, 1 << 26];  // points per frame: min, start, max
 
 export const hexColor = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -64,7 +64,8 @@ export async function createRenderer(gl, engine) {
   function* gridCurves(s, target, progress = {}) {
     const T = { t0: s.t.lo, t1: s.t.hi, samples: s.t.n };
     const perEval = Math.floor(evaluator.capacity / T.samples);
-    const chunk = Math.max(1, Math.floor(DRAW_CHUNK / T.samples));
+    const reps = repeats(s.style);
+    const chunk = Math.max(1, Math.floor(DRAW_CHUNK / (T.samples * reps)));
     const style = lineStyle(s.style, target.w, target.h);
     const total = grid.total, version = grid.version;
     progress.done = 0;
@@ -83,7 +84,7 @@ export async function createRenderer(gl, engine) {
           lines.draw({ params, points: evaluator.texture, first: c + d, offset: d, count: k,
             samples: T.samples, view: target.view, viewport: [target.w, target.h], style });
           progress.done = slab + c + d + k;
-          yield k * T.samples;
+          yield k * T.samples * reps;
         }
       }
     }

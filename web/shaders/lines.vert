@@ -1,6 +1,8 @@
 #version 300 es
 // Thick lines: one instance per segment, 6 vertices (two triangles) each.
 // Ends are mitred with the neighbouring segments so joints have no gaps.
+// Each curve is drawn u_repeat times, copy r turned by r * u_turn; all
+// copies of a curve come before the next curve.
 #include "curve_data.glsl"
 
 uniform int u_first;      // first curve in u_params
@@ -10,13 +12,20 @@ uniform vec4 u_view;      // clip = (z - u_view.xy) * u_view.zw
 uniform vec2 u_viewport;  // px
 uniform float u_half;     // half width, px, including the AA fringe
 uniform vec2 u_fade;      // (k, n): curve i of n gets weight k^(n - 1 - i)
+uniform int u_repeat;
+uniform float u_turn;     // radians
 
 out vec2 v_z;             // phi
 out vec3 v_uvt;           // (u_norm, v_norm, t fraction)
 out float v_dist;         // signed px from the centre line
 out float v_weight;
 
-vec2 to_px(vec2 z) { return (z - u_view.xy) * u_view.zw * 0.5 * u_viewport; }
+vec2 g_rot;  // this copy's rotation, (cos, sin)
+
+vec2 to_px(vec2 z) {
+    z = vec2(z.x * g_rot.x - z.y * g_rot.y, z.x * g_rot.y + z.y * g_rot.x);
+    return (z - u_view.xy) * u_view.zw * 0.5 * u_viewport;
+}
 
 vec2 normal_of(vec2 d, vec2 fallback) {
     float l = length(d);
@@ -25,7 +34,10 @@ vec2 normal_of(vec2 d, vec2 fallback) {
 
 void main() {
     int segs = u_samples - 1;
-    int curve = gl_InstanceID / segs, j = gl_InstanceID % segs, base = (u_offset + curve) * u_samples;
+    int per = segs * u_repeat;
+    int curve = gl_InstanceID / per, j = gl_InstanceID % per % segs, base = (u_offset + curve) * u_samples;
+    float turn = float(gl_InstanceID % per / segs) * u_turn;
+    g_rot = vec2(cos(turn), sin(turn));
     vec4 q = curve_texel(u_first + curve, 1);
     vec2 z0 = point_at(base + j), z1 = point_at(base + j + 1);
     vec2 p0 = to_px(z0), p1 = to_px(z1);

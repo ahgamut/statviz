@@ -4,6 +4,7 @@
 // offscreen target; when the view, size or style changes, the history is
 // replayed into a second target over several frames while the old one is
 // shown warped to the new view.
+import { repeats } from './gl/lines.js';
 import { createParams } from './gl/params.js';
 import { viewTransform } from './render.js';
 
@@ -62,7 +63,7 @@ export function createScrub(gl, engine, { lines, evaluator, trails, targets, fam
       drawCurves(target, owed, r.data, r.stats.curves, s, target.view, k);
       if (r.next <= next) return;  // the history was cleared
       progress.done = next = r.next;
-      yield r.stats.curves * t.samples;
+      yield r.stats.curves * t.samples * repeats(s.style);
     }
   }
 

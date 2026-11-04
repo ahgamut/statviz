@@ -30,6 +30,7 @@ export function defaultState() {
       blend: 'over',         // over | add
       background: '#0d0e10',
       overlay: true,
+      repeat: { n: 1, angle: 0 },  // copies turned by angle (radians); angle 0 draws one
     },
     view: { cx: 0, cy: 0, zoom: 1 },
     export: { w: 2048, h: 2048, transparent: true, circle: false },
