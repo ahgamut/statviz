@@ -22,6 +22,9 @@ export function viewTransform({ cx, cy, zoom }, w, h) {
   return [cx, cy, s / w, s / h];
 }
 
+// Exports: the unit disk centred, its diameter the shorter side.
+export const exportView = (w, h) => [0, 0, Math.min(w, h) / w, Math.min(w, h) / h];
+
 export async function createRenderer(gl, engine) {
   const colormaps = createColormaps(gl);
   const [lines, overlay, evaluator, trails] = await Promise.all([
@@ -158,7 +161,7 @@ export async function createRenderer(gl, engine) {
     // Largest export side this GPU allows.
     maxExport: Math.min(MAX_EXPORT, gl.getParameter(gl.MAX_TEXTURE_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
 
-    // Draws the current mode's image at w x h px offscreen, a slice per
+    // Draws the current mode's image at w x h px offscreen (see exportView), a slice per
     // animation frame. Resolves to {read(y, n, out), dispose()}: read gets
     // RGBA rows [y, y + n), top first, straight alpha. preview: the canvas
     // size, so a Scrub fade covers the same distance. onProgress gets
@@ -174,8 +177,9 @@ export async function createRenderer(gl, engine) {
       try {
         image.resize(w, h);
         image.clear();
-        image.view = viewTransform(s.view, w, h);
-        const scale = Math.min(w, h) / Math.min(...preview);
+        image.view = exportView(w, h);
+        // px per unit disk radius here over the preview's.
+        const scale = image.view[2] * w / (viewTransform(s.view, ...preview)[2] * preview[0]);
         const curves = s.mode === 'render' ? gridCurves(s, image, progress)
           : s.mode === 'scrub' ? scrub.replayCurves(s, image, { pending: 1 }, { scale, progress })
           : [].values();

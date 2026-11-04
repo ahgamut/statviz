@@ -175,7 +175,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
     section('Export',
       row('size', ew.el, h('span.times', {}, '×'), eh.el, h('span.unit', {}, 'px')),
       row('', sizeButton('square', 'square', `${maxExport} × ${maxExport}`),
-        sizeButton('canvas shape', 'view', 'The largest size with the shape of the canvas, so the export frames what you see')),
+        sizeButton('canvas shape', 'view', 'The largest size with the shape of the canvas')),
       row('', transparent.el), row('', circle.el), row('', exportButton, openButton, picker), exportProgress, exportNote),
     status,
   );
