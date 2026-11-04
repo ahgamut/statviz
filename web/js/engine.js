@@ -23,6 +23,7 @@ export async function loadEngine() {
   const meta = JSON.parse(cstring(m._sv_metadata()));
   const varIndex = Object.fromEntries(meta.vars.map((name, i) => [name, i]));
   const curveFloats = meta.curveFloats;
+  let pngWidth = 0;
 
   return {
     meta,
@@ -104,6 +105,26 @@ export async function loadEngine() {
       return points(m._sv_points_grid(first, count, t0, t1, samples), count * samples);
     },
 
+    // Streaming PNG encoder. Each call returns a copy of the bytes it
+    // encoded. text: [keyword, value] ASCII chunks. rows(rgba, n) takes n
+    // rows of w RGBA pixels, top to bottom.
+    pngBegin(w, h, alpha, text = []) {
+      pngWidth = w;
+      const parts = [png(m._sv_png_begin(w, h, alpha ? 1 : 0), 'begin')];
+      for (const [key, value] of text) {
+        const len = writeScratch(key + '\0' + value);
+        parts.push(png(m._sv_png_text(len), 'text'));
+      }
+      return parts;
+    },
+    pngRows(rgba, n) {
+      m.HEAPU8.set(rgba.subarray(0, n * pngWidth * 4), m._sv_png_input(n));
+      return png(m._sv_png_rows(n), 'rows');
+    },
+    pngEnd() {
+      return png(m._sv_png_end(), 'end');
+    },
+
     // Same for the curves of the last scrubPush / scrubReplay.
     pointsScrub(count, { t0, t1, samples }) {
       return points(m._sv_points_scrub(t0, t1, samples), count * samples);
@@ -113,6 +134,11 @@ export async function loadEngine() {
   function points(ptr, n) {
     if (!ptr) throw new Error(`too many points (${n}); the limit is ${m._sv_max_points()} per call`);
     return m.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + 2 * n);
+  }
+
+  function png(len, step) {
+    if (len < 0) throw new Error(`PNG encoder: ${step} failed`);
+    return m.HEAPU8.slice(m._sv_png_out(), m._sv_png_out() + len);
   }
 
   function built() {

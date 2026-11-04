@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "statviz/meta.hpp"
+#include "statviz/png.hpp"
 #include "statviz/points.hpp"
 #include "statviz/scene.hpp"
 #include "statviz/scrub.hpp"
@@ -31,6 +32,9 @@ int g_replay_next = 0;
 double g_state[sv::expr::kNumVars];
 sv::ScrubHistory g_history;
 sv::Interpolated g_interp;
+sv::PngWriter g_png;
+std::vector<uint8_t> g_png_in;
+int g_png_w = 0;
 
 void set_stats(const sv::BuildStats& st) {
     g_stats[0] = st.curves;
@@ -159,3 +163,37 @@ SV_API float* sv_points_scrub(double t0, double t1, int m) {
     sv::generate_points(g_scene, g_interp.states.data(), count, {t0, t1, m}, g_points.data());
     return g_points.data();
 }
+
+// PNG export. Each call returns the number of encoded bytes now at
+// sv_png_out() (valid until the next sv_png_* call), or -1 on error.
+SV_API int sv_png_begin(int w, int h, int alpha) {
+    g_png_w = w;
+    return g_png.begin(w, h, alpha != 0) ? static_cast<int>(g_png.out().size()) : -1;
+}
+
+// tEXt chunk "keyword\0text" from the first len bytes of the scratch buffer.
+SV_API int sv_png_text(int len) {
+    std::string_view s(g_scratch.data(), std::clamp(len, 0, static_cast<int>(g_scratch.size())));
+    size_t nul = s.find('\0');
+    if (nul == std::string_view::npos) return -1;
+    return g_png.text(s.substr(0, nul), s.substr(nul + 1)) ? static_cast<int>(g_png.out().size()) : -1;
+}
+
+// Where JS writes n RGBA rows before sv_png_rows(n).
+SV_API uint8_t* sv_png_input(int n) {
+    g_png_in.resize(static_cast<size_t>(std::max(n, 1)) * std::max(g_png_w, 1) * 4);
+    return g_png_in.data();
+}
+
+SV_API int sv_png_rows(int n) {
+    if (static_cast<size_t>(std::max(n, 0)) * g_png_w * 4 > g_png_in.size()) return -1;
+    return g_png.rows(g_png_in.data(), n) ? static_cast<int>(g_png.out().size()) : -1;
+}
+
+SV_API int sv_png_end() {
+    bool ok = g_png.end();
+    g_png_in = {};
+    return ok ? static_cast<int>(g_png.out().size()) : -1;
+}
+
+SV_API const uint8_t* sv_png_out() { return g_png.out().data(); }
