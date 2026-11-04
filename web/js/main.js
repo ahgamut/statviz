@@ -1,4 +1,5 @@
 import { loadEngine } from './engine.js';
+import { download, exportName, exportPng } from './export.js';
 import { createRenderer } from './render.js';
 import { SLIDER_VARS, createStore, decodeState, defaultState, encodeState } from './state.js';
 import { createPanel } from './ui/panel.js';
@@ -31,6 +32,7 @@ async function main() {
   // error keeps its last valid expression in the engine.
   let engineFamily = null;
   function applyScene() {
+    actions.cancelExport('the scene changed');
     const s = store.state;
     const family = familyOf(s.family);
     if (family !== engineFamily) {
@@ -59,6 +61,8 @@ async function main() {
     info.stats = renderer.scrub.stats;
   }
 
+  let exporting = null;  // {ctl: AbortController, reason}
+
   const actions = {
     setFamily(key) {
       const s = store.state;
@@ -74,13 +78,62 @@ async function main() {
     },
     clearTrail() {
       if (store.state.mode !== 'scrub') return;
+      actions.cancelExport('the trail was cleared');
       renderer.scrub.reset();
       pushScrub();
       requestDraw();
     },
+
+    exportSize(kind) {
+      const max = renderer.maxExport, aspect = canvas.width / Math.max(1, canvas.height);
+      const [w, h] = kind === 'square' ? [max, max]
+        : aspect >= 1 ? [max, Math.round(max / aspect)] : [Math.round(max * aspect), max];
+      store.set('export.w', Math.max(16, w));
+      store.set('export.h', Math.max(16, h));
+    },
+
+    async exportPng() {
+      if (exporting || store.state.mode === 'animate') return;
+      const s = structuredClone(store.state);
+      const max = renderer.maxExport;
+      s.export.w = Math.min(max, s.export.w);
+      s.export.h = Math.min(max, s.export.h);
+      const job = { ctl: new AbortController(), reason: '' }, ctl = job.ctl;
+      exporting = job;
+      info.export = { running: true, phase: 'drawing', fraction: 0 };
+      panel.update(store.state, info);
+      try {
+        const blob = await exportPng({ renderer, engine }, s, {
+          preview: [canvas.width, canvas.height],
+          signal: ctl.signal,
+          onProgress(phase, fraction) {
+            Object.assign(info.export, { phase, fraction });
+            panel.update(store.state, info);
+          },
+        });
+        const name = exportName(s);
+        download(blob, name);
+        const size = blob.size < 2 ** 20 ? `${Math.ceil(blob.size / 1024)} KB` : `${(blob.size / 2 ** 20).toFixed(1)} MB`;
+        info.export = { note: `saved ${name} · ${size}` };
+      } catch (err) {
+        if (!ctl.signal.aborted) console.error(err);
+        info.export = { note: ctl.signal.aborted ? 'cancelled' + (job.reason ? `: ${job.reason}` : '')
+          : `export failed: ${err.message ?? err}` };
+      } finally {
+        exporting = null;
+        panel.update(store.state, info);
+        requestDraw();
+      }
+    },
+
+    cancelExport(reason = '') {
+      if (!exporting) return;
+      exporting.reason = reason;
+      exporting.ctl.abort();
+    },
   };
 
-  const panel = createPanel(document.getElementById('panel'), { meta, store, actions });
+  const panel = createPanel(document.getElementById('panel'), { meta, store, actions, maxExport: renderer.maxExport });
   attachViewControls(canvas, store);
   window.statviz = { store, engine, renderer };  // for the console
 
@@ -154,6 +207,7 @@ async function main() {
     if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'h') document.body.classList.toggle('panel-hidden');
     else if (e.key === 'c') actions.clearTrail();
+    else if (e.key === 'e') actions.exportPng();
   });
 }
 

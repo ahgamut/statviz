@@ -8,7 +8,7 @@ import { renderTex } from './katex.js';
 const section = (title, ...children) => h('details.section', { open: true }, h('summary', {}, title), ...children);
 const row = (label, ...children) => h('div.row', {}, h('span.label', {}, label), ...children);
 
-export function createPanel(root, { meta, store, actions }) {
+export function createPanel(root, { meta, store, actions, maxExport }) {
   const updates = [];
   const bind = (control, fn) => { updates.push((s, info) => fn(control, s, info)); return control.el; };
 
@@ -120,6 +120,32 @@ export function createPanel(root, { meta, store, actions }) {
   const background = colorInput(store, 'style.background');
   const overlay = checkbox(store, 'style.overlay', 'unit circle and axes');
 
+  // Export
+  const size = (axis) => numberInput(store, `export.${axis}`, { integer: true, min: 16, max: maxExport, title: 'px', wide: true });
+  const ew = size('w'), eh = size('h');
+  const sizeButton = (label, kind, title) =>
+    h('button.small', { type: 'button', title, on: { click: () => actions.exportSize(kind) } }, label);
+  const transparent = checkbox(store, 'export.transparent', 'transparent background');
+  const circle = checkbox(store, 'export.circle', 'unit circle');
+  const exportButton = h('button', { type: 'button', on: { click: () => actions.exportPng() } }, 'Export PNG (E)');
+  const exportBar = h('progress', { max: 1, value: 0 });
+  const exportText = h('span.progress-text');
+  const exportProgress = h('div.progress-row', {}, exportBar, exportText,
+    h('button.small', { type: 'button', on: { click: () => actions.cancelExport() } }, 'Cancel'));
+  const exportNote = h('div.hint');
+  const updateExport = (s, e) => {
+    ew.update(s.export.w); eh.update(s.export.h);
+    transparent.update(s.export.transparent); circle.update(s.export.circle);
+    exportButton.disabled = !!e?.running || s.mode === 'animate';
+    exportProgress.hidden = !e?.running;
+    if (e?.running) {
+      exportBar.value = (e.phase === 'encoding' ? 0.9 + 0.1 * e.fraction : 0.9 * e.fraction) || 0;
+      exportText.textContent = `${e.phase} ${Math.round(100 * e.fraction)}%`;
+    }
+    exportNote.textContent = e?.note ?? '';
+    exportNote.hidden = !e?.note || e.running;
+  };
+
   const status = h('div.status');
 
   root.append(
@@ -134,6 +160,11 @@ export function createPanel(root, { meta, store, actions }) {
       row('colour by', colorBy.el), row('colormap', cmap.el, reverse.el), stopsRow,
       row('width', width.el, h('span.unit', {}, '‰')), row('opacity', opacity.el), row('blend', blend.el),
       row('background', background.el), row('', overlay.el)),
+    section('Export',
+      row('size', ew.el, h('span.times', {}, '×'), eh.el, h('span.unit', {}, 'px')),
+      row('', sizeButton('square', 'square', `${maxExport} × ${maxExport}`),
+        sizeButton('canvas shape', 'view', 'The largest size with the shape of the canvas, so the export frames what you see')),
+      row('', transparent.el), row('', circle.el), row('', exportButton), exportProgress, exportNote),
     status,
   );
 
@@ -172,6 +203,7 @@ export function createPanel(root, { meta, store, actions }) {
       stops.forEach((c, i) => c.update(s.style.custom[i]));
       width.update(s.style.width); opacity.update(s.style.opacity); blend.update(s.style.blend);
       background.update(s.style.background); overlay.update(s.style.overlay);
+      updateExport(s, info.export);
       status.textContent = info.status ?? '';
     },
   };

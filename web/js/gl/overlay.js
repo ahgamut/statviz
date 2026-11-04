@@ -1,4 +1,4 @@
-// Unit circle and axes, drawn under the curves in the preview.
+// Unit circle and axes, drawn under the curves.
 import { loadProgram, uniforms, shaderUrl as shader } from './util.js';
 
 const SEGMENTS = 256;
@@ -24,14 +24,16 @@ export async function createOverlay(gl) {
   gl.bindVertexArray(null);
 
   return {
-    draw({ view }) {
+    draw({ view, axes = true }) {
       gl.useProgram(program);
       gl.bindVertexArray(vao);
       gl.uniform4fv(u.u_view, view);
       gl.uniform4f(u.u_color, 0.28, 0.3, 0.33, 1.0);
       gl.drawArrays(gl.LINE_LOOP, 0, SEGMENTS);
-      gl.uniform4f(u.u_color, 0.17, 0.18, 0.2, 1.0);
-      gl.drawArrays(gl.LINES, SEGMENTS, 4);
+      if (axes) {
+        gl.uniform4f(u.u_color, 0.17, 0.18, 0.2, 1.0);
+        gl.drawArrays(gl.LINES, SEGMENTS, 4);
+      }
       gl.bindVertexArray(null);
     },
   };

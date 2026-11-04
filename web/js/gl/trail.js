@@ -4,11 +4,13 @@
 import { loadProgram, uniforms, shaderUrl } from './util.js';
 
 export async function createTrailTools(gl) {
-  const [composite, fill] = await Promise.all([
+  const [composite, fill, flatten] = await Promise.all([
     loadProgram(gl, shaderUrl('screen.vert'), shaderUrl('composite.frag')),
     loadProgram(gl, shaderUrl('screen.vert'), shaderUrl('fill.frag')),
+    loadProgram(gl, shaderUrl('screen.vert'), shaderUrl('flatten.frag')),
   ]);
   const cu = uniforms(gl, composite, ['u_map', 'u_tex']);
+  const fu = uniforms(gl, flatten, ['u_tex', 'u_bg', 'u_add']);
   const vao = gl.createVertexArray();
   // Half floats so fading doesn't stall at 8-bit steps.
   const half = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
@@ -74,6 +76,21 @@ export async function createTrailTools(gl) {
       gl.bindTexture(gl.TEXTURE_2D, target.texture);
       gl.uniform1i(cu.u_tex, 0);
       gl.uniform4f(cu.u_map, (0.5 * okx) / kx, (0.5 * oky) / ky, 0.5 * (cx - ox) * okx + 0.5, 0.5 * (cy - oy) * oky + 0.5);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindVertexArray(null);
+    },
+
+    // Writes target, same size as the bound framebuffer, composited onto bg
+    // (premultiplied RGBA; zeros for transparent) as straight alpha with
+    // rows flipped. Blending must be off.
+    flatten(target, bg, add) {
+      gl.useProgram(flatten);
+      gl.bindVertexArray(vao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, target.texture);
+      gl.uniform1i(fu.u_tex, 0);
+      gl.uniform4fv(fu.u_bg, bg);
+      gl.uniform1i(fu.u_add, add ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindVertexArray(null);
     },

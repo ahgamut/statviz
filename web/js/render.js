@@ -10,6 +10,7 @@ import { createTrailTools } from './gl/trail.js';
 import { createScrub } from './scrub.js';
 
 export const SCALE = 0.9;        // unit disk radius in clip space at zoom 1
+export const MAX_EXPORT = 2048;  // px per side
 const DRAW_CHUNK = 1 << 20;      // points per lines.draw call
 const BUDGET = [1 << 18, 1 << 22, 1 << 26];  // points per frame: min, start, max
 
@@ -152,6 +153,69 @@ export async function createRenderer(gl, engine) {
     // Render mode progress: null when idle, else {done, total, paused}.
     get progress() { return job && { ...job.progress, paused: job.paused }; },
     pause(paused) { if (job) job.paused = paused; },
+
+    // Largest export side this GPU allows.
+    maxExport: Math.min(MAX_EXPORT, gl.getParameter(gl.MAX_TEXTURE_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
+
+    // Draws the current mode's image at w x h px offscreen, a slice per
+    // animation frame. Resolves to {read(y, n, out), dispose()}: read gets
+    // RGBA rows [y, y + n), top first, straight alpha. preview: the canvas
+    // size, so a Scrub fade covers the same distance. onProgress gets
+    // {done, total} after each frame; an aborted signal rejects.
+    async renderImage(s, w, h, { transparent, circle, preview, onProgress, signal }) {
+      const progress = { done: 0, total: 0 };
+      const image = trails.createTarget();
+      const out = gl.createTexture(), fbo = gl.createFramebuffer();
+      const release = () => {
+        gl.deleteFramebuffer(fbo);
+        gl.deleteTexture(out);
+      };
+      try {
+        image.resize(w, h);
+        image.clear();
+        image.view = viewTransform(s.view, w, h);
+        if (circle) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          overlay.draw({ view: image.view, axes: false });
+        }
+        const scale = Math.min(w, h) / Math.min(...preview);
+        const curves = s.mode === 'render' ? gridCurves(s, image, progress)
+          : s.mode === 'scrub' ? scrub.replayCurves(s, image, { pending: 1 }, { scale, progress })
+          : [].values();
+        const pace = createBudget();
+        for (;;) {
+          await new Promise(requestAnimationFrame);
+          signal?.throwIfAborted();
+          pace.frame();
+          const done = run(curves, pace.points);
+          onProgress?.(progress);
+          if (done) break;
+        }
+
+        gl.bindTexture(gl.TEXTURE_2D, out);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, out, 0);
+        gl.viewport(0, 0, w, h);
+        gl.disable(gl.BLEND);
+        const bg = transparent ? [0, 0, 0, 0] : [...hexColor(s.style.background), 1];
+        trails.flatten(image, bg, s.style.blend === 'add');
+        gl.enable(gl.BLEND);
+      } catch (err) {
+        release();
+        throw err;
+      } finally {
+        image.dispose();
+      }
+      return {
+        read(y, n, rgba) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+          gl.readPixels(0, y, w, n, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+        },
+        dispose: release,
+      };
+    },
 
     // Returns true while more frames are needed.
     draw(state, w, h) {

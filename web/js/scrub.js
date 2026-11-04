@@ -60,6 +60,7 @@ export function createScrub(gl, engine, { lines, evaluator, trails, targets, fam
     for (let next = 0; next < end;) {
       const r = engine.scrubReplay(next, Math.min(end, next + REPLAY_KEYS), t, step);
       drawCurves(target, owed, r.data, r.stats.curves, s, target.view, k);
+      if (r.next <= next) return;  // the history was cleared
       progress.done = next = r.next;
       yield r.stats.curves * t.samples;
     }

@@ -32,6 +32,7 @@ export function defaultState() {
       overlay: true,
     },
     view: { cx: 0, cy: 0, zoom: 1 },
+    export: { w: 2048, h: 2048, transparent: true, circle: false },
   };
 }
 
@@ -75,12 +76,30 @@ export function createStore(state) {
   };
 }
 
-// ---- URL hash: base64url of the scene JSON ----
+// ---- Scene JSON (URL hash, PNG text chunk) ----
 
 const VERSION = 1;
 
+// ASCII only (non-ASCII escaped), so it fits a PNG tEXt chunk as is.
+export function sceneJson(state) {
+  return JSON.stringify({ version: VERSION, ...state })
+    .replace(/[\u007f-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
+// Returns null if text holds no readable scene.
+export function parseScene(text) {
+  try {
+    const json = JSON.parse(text);
+    if (json?.version !== VERSION) return null;
+    return merge(defaultState(), json);
+  } catch {
+    return null;
+  }
+}
+
+// URL hash: base64url of the scene JSON.
 export function encodeState(state) {
-  const bytes = new TextEncoder().encode(JSON.stringify({ version: VERSION, ...state }));
+  const bytes = new TextEncoder().encode(sceneJson(state));
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -106,9 +125,7 @@ export function decodeState(hash) {
   if (!s) return null;
   try {
     const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-    const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
-    if (json?.version !== VERSION) return null;
-    return merge(defaultState(), json);
+    return parseScene(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
   } catch {
     return null;
   }
