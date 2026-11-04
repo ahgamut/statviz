@@ -1,6 +1,6 @@
 import { loadEngine } from './engine.js';
 import { createRenderer } from './render.js';
-import { SLIDER_VARS, createStore, defaultState } from './state.js';
+import { SLIDER_VARS, createStore, decodeState, defaultState, encodeState } from './state.js';
 import { createPanel } from './ui/panel.js';
 import { attachViewControls } from './ui/viewctl.js';
 
@@ -19,7 +19,9 @@ async function main() {
   const engine = await loadEngine();
   const renderer = await createRenderer(gl, engine);
   const meta = engine.meta;
-  const store = createStore(defaultState());
+  const initial = decodeState(location.hash) ?? defaultState();
+  if (!meta.families.some((f) => f.key === initial.family)) initial.family = defaultState().family;
+  const store = createStore(initial);
   const info = { errors: [], stats: null, varsUsed: new Set(), status: '' };
   const familyExprs = new Map();  // per-family expressions, this session only
 
@@ -96,6 +98,21 @@ async function main() {
     }
     panel.update(s, info);
   }
+
+  // The scene lives in the URL hash, so a link reproduces the image.
+  let hashTimer = 0, written = location.hash.slice(1);
+  store.subscribe(() => {
+    clearTimeout(hashTimer);
+    hashTimer = setTimeout(() => {
+      written = encodeState(store.state);
+      history.replaceState(null, '', '#' + written);
+    }, 300);
+  });
+  window.addEventListener('hashchange', () => {
+    if (location.hash.slice(1) === written) return;
+    const next = decodeState(location.hash);
+    if (next && meta.families.some((f) => f.key === next.family)) store.replace(next);
+  });
 
   store.subscribe((paths) => {
     const has = (prefix) => [...paths].some((p) => p === '*' || p.startsWith(prefix));

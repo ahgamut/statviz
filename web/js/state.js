@@ -74,3 +74,42 @@ export function createStore(state) {
     },
   };
 }
+
+// ---- URL hash: base64url of the scene JSON ----
+
+const VERSION = 1;
+
+export function encodeState(state) {
+  const bytes = new TextEncoder().encode(JSON.stringify({ version: VERSION, ...state }));
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Values from `from` that match the shape and types of `base`; the rest from base.
+function merge(base, from) {
+  if (Array.isArray(base)) {
+    if (!Array.isArray(from)) return base;
+    return from.filter((x) => typeof x === typeof (base[0] ?? '')).slice(0, 16);
+  }
+  if (base && typeof base === 'object') {
+    if (!from || typeof from !== 'object' || Array.isArray(from)) return base;
+    return Object.fromEntries(Object.entries(base).map(([k, v]) => [k, merge(v, from[k])]));
+  }
+  if (typeof base === 'number') return Number.isFinite(from) ? from : base;
+  return typeof from === typeof base ? from : base;
+}
+
+// Returns null if the hash holds no readable scene.
+export function decodeState(hash) {
+  const s = hash.replace(/^#/, '');
+  if (!s) return null;
+  try {
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+    const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+    if (json?.version !== VERSION) return null;
+    return merge(defaultState(), json);
+  } catch {
+    return null;
+  }
+}
