@@ -1,5 +1,5 @@
 import { loadEngine } from './engine.js';
-import { download, exportName, exportPng } from './export.js';
+import { download, exportName, exportPng, sceneFromPng } from './export.js';
 import { createRenderer } from './render.js';
 import { SLIDER_VARS, createStore, decodeState, defaultState, encodeState } from './state.js';
 import { createPanel } from './ui/panel.js';
@@ -126,6 +126,18 @@ async function main() {
       }
     },
 
+    // A scene from a PNG exported here (file picker or drop).
+    async loadScene(file) {
+      const next = await sceneFromPng(file).catch(() => null);
+      if (next && meta.families.some((f) => f.key === next.family)) {
+        store.replace(next);
+        info.export = { note: `loaded the scene from ${file.name}` };
+      } else {
+        info.export = { note: `${file.name} holds no statviz scene` };
+      }
+      panel.update(store.state, info);
+    },
+
     cancelExport(reason = '') {
       if (!exporting) return;
       exporting.reason = reason;
@@ -202,6 +214,24 @@ async function main() {
   } catch {
     resize.observe(canvas);  // Safari
   }
+
+  // Dropping an exported PNG anywhere loads its scene.
+  const files = (e) => [...(e.dataTransfer?.items ?? [])].some((i) => i.kind === 'file');
+  window.addEventListener('dragover', (e) => {
+    if (!files(e)) return;
+    e.preventDefault();
+    document.body.classList.add('dropping');
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!e.relatedTarget) document.body.classList.remove('dropping');
+  });
+  window.addEventListener('drop', (e) => {
+    document.body.classList.remove('dropping');
+    const file = e.dataTransfer?.files[0];
+    if (!file) return;
+    e.preventDefault();
+    actions.loadScene(file);
+  });
 
   window.addEventListener('keydown', (e) => {
     if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;

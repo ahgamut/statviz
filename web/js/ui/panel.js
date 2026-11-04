@@ -133,6 +133,12 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
   const exportProgress = h('div.progress-row', {}, exportBar, exportText,
     h('button.small', { type: 'button', on: { click: () => actions.cancelExport() } }, 'Cancel'));
   const exportNote = h('div.hint');
+  const picker = h('input', { type: 'file', accept: 'image/png', hidden: true, on: { change: () => {
+    if (picker.files[0]) actions.loadScene(picker.files[0]);
+    picker.value = '';
+  } } });
+  const openButton = h('button', { type: 'button', title: 'Load the scene stored in a PNG exported here (or drop the file on the page)',
+    on: { click: () => picker.click() } }, 'Open PNG…');
   const updateExport = (s, e) => {
     ew.update(s.export.w); eh.update(s.export.h);
     transparent.update(s.export.transparent); circle.update(s.export.circle);
@@ -164,7 +170,7 @@ export function createPanel(root, { meta, store, actions, maxExport }) {
       row('size', ew.el, h('span.times', {}, '×'), eh.el, h('span.unit', {}, 'px')),
       row('', sizeButton('square', 'square', `${maxExport} × ${maxExport}`),
         sizeButton('canvas shape', 'view', 'The largest size with the shape of the canvas, so the export frames what you see')),
-      row('', transparent.el), row('', circle.el), row('', exportButton), exportProgress, exportNote),
+      row('', transparent.el), row('', circle.el), row('', exportButton, openButton, picker), exportProgress, exportNote),
     status,
   );
 
