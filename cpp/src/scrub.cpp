@@ -78,11 +78,12 @@ void ScrubHistory::push(const Scene& sc, const State& key, const TRange& ts, dou
     keys_.push_back(key);
 }
 
-void ScrubHistory::replay(const Scene& sc, int k0, int k1, const TRange& ts, double max_step,
-                          Interpolated& out) const {
+int ScrubHistory::replay(const Scene& sc, int k0, int k1, const TRange& ts, double max_step, Interpolated& out,
+                         size_t max_states) const {
     k0 = std::max(k0, 0);
     k1 = std::min(k1, size());
     for (int k = k0; k < k1; ++k) {
+        if (k > k0 && out.states.size() >= max_states) return k;
         if (k == 0) {
             out.states.push_back(keys_[0]);
             out.keys.push_back(0);
@@ -90,6 +91,7 @@ void ScrubHistory::replay(const Scene& sc, int k0, int k1, const TRange& ts, dou
             segment(sc, keys_[k - 1], keys_[k], k, ts, max_step, out);
         }
     }
+    return std::max(k0, k1);
 }
 
 }  // namespace sv

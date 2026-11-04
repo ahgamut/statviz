@@ -61,10 +61,13 @@ export async function loadEngine() {
       return m._sv_grid_size();
     },
 
-    // {data: Float32Array of count * curveFloats, stats: {curves, valid, bad[]}}
+    maxCurves: m._sv_max_curves(),
+
+    // {data: Float32Array of stats.curves * curveFloats, stats: {curves, valid, bad[]}}.
+    // Builds at most maxCurves; build larger grids in slabs.
     buildGrid(first = 0, count = m._sv_grid_size() - first) {
       m._sv_build_grid(first, count);
-      return built(count);
+      return built();
     },
 
     // Scrub mode. state: {u, v, a, b, c, d, R} (missing names are 0).
@@ -75,13 +78,14 @@ export async function loadEngine() {
       const sp = m._sv_state() >> 3;
       meta.vars.forEach((name, i) => { m.HEAPF64[sp + i] = state[name] ?? 0; });
       const n = m._sv_scrub_push(t0, t1, samples, maxStep);
-      return { ...built(n), keys: curveKeys(n) };
+      return { ...built(), keys: curveKeys(n) };
     },
 
     // Rebuilds keys [k0, k1) at a different maxStep (e.g. export resolution).
+    // May stop early to bound memory; continue from the returned next key.
     scrubReplay(k0, k1, { t0, t1, samples }, maxStep) {
       const n = m._sv_scrub_replay(k0, k1, t0, t1, samples, maxStep);
-      return { ...built(n), keys: curveKeys(n) };
+      return { ...built(), keys: curveKeys(n), next: m._sv_scrub_replay_next() };
     },
 
     scrubClear() {
@@ -91,13 +95,31 @@ export async function loadEngine() {
     scrubSize() {
       return m._sv_scrub_size();
     },
+
+    maxPoints: m._sv_max_points(),
+
+    // CPU path: Float32Array of count * samples (Re, Im) pairs, curve-major,
+    // for grid curves [first, first + count). count * samples <= maxPoints.
+    pointsGrid(first, count, { t0, t1, samples }) {
+      return points(m._sv_points_grid(first, count, t0, t1, samples), count * samples);
+    },
+
+    // Same for the curves of the last scrubPush / scrubReplay.
+    pointsScrub(count, { t0, t1, samples }) {
+      return points(m._sv_points_scrub(t0, t1, samples), count * samples);
+    },
   };
 
-  function built(count) {
-    const p = m._sv_curves() >> 2;
-    const data = m.HEAPF32.subarray(p, p + count * curveFloats);
+  function points(ptr, n) {
+    if (!ptr) throw new Error(`too many points (${n}); the limit is ${m._sv_max_points()} per call`);
+    return m.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + 2 * n);
+  }
+
+  function built() {
     const sp = m._sv_stats() >> 2;
     const s = m.HEAP32.subarray(sp, sp + 2 + meta.maxParams);
+    const p = m._sv_curves() >> 2;
+    const data = m.HEAPF32.subarray(p, p + s[0] * curveFloats);
     return { data, stats: { curves: s[0], valid: s[1], bad: Array.from(s.subarray(2)) } };
   }
 

@@ -9,7 +9,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_library(statviz_core STATIC src/expr.cpp src/families.cpp src/gpu.cpp src/meta.cpp src/scene.cpp src/scrub.cpp)
+add_library(statviz_core STATIC src/expr.cpp src/families.cpp src/gpu.cpp src/meta.cpp src/points.cpp src/scene.cpp src/scrub.cpp)
 target_include_directories(statviz_core PUBLIC include)
 target_compile_options(statviz_core PRIVATE -Wall -Wextra -Wpedantic)
 if(EMSCRIPTEN)
@@ -19,7 +19,7 @@ endif()
 # Tests run natively, and under node for the WebAssembly build
 # (Emscripten's toolchain sets CMAKE_CROSSCOMPILING_EMULATOR).
 enable_testing()
-add_executable(statviz_tests tests/main.cpp tests/test_expr.cpp tests/test_families.cpp tests/test_scene.cpp tests/test_scrub.cpp)
+add_executable(statviz_tests tests/main.cpp tests/test_expr.cpp tests/test_families.cpp tests/test_points.cpp tests/test_scene.cpp tests/test_scrub.cpp)
 target_link_libraries(statviz_tests PRIVATE statviz_core)
 target_include_directories(statviz_tests SYSTEM PRIVATE third_party/doctest)
 add_test(NAME statviz_tests COMMAND statviz_tests)
@@ -36,7 +36,7 @@ if(EMSCRIPTEN)
     -sEXPORT_ES6
     -sENVIRONMENT=web
     -sALLOW_MEMORY_GROWTH=0
-    -sINITIAL_MEMORY=64MB
+    -sINITIAL_MEMORY=128MB
     -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32,HEAPF32,HEAPF64)
 endif()
 

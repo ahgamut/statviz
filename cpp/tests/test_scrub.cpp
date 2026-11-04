@@ -114,4 +114,13 @@ TEST_CASE("replay at a finer step keeps the keys and refines the band") {
     h.replay(sc, 2, 99, kT, 0.002, batched);
     CHECK(batched.states == fine.states);
     CHECK(batched.keys == fine.keys);
+
+    // A state cap stops at a key boundary; continuing from there completes it.
+    Interpolated capped;
+    int next = h.replay(sc, 0, h.size(), kT, 0.002, capped, 10);
+    CHECK(next > 1);
+    CHECK(next < h.size());
+    CHECK(capped.keys.back() == next - 1);
+    while (next < h.size()) next = h.replay(sc, next, h.size(), kT, 0.002, capped, 10);
+    CHECK(capped.states == fine.states);
 }

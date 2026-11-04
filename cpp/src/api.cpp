@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "statviz/meta.hpp"
+#include "statviz/points.hpp"
 #include "statviz/scene.hpp"
 #include "statviz/scrub.hpp"
 
@@ -21,6 +22,12 @@ sv::expr::Error g_error;
 std::vector<float> g_curves;
 int g_stats[2 + sv::kMaxParams];
 std::string g_meta;
+std::vector<float> g_points;
+std::vector<sv::State> g_grid_states;
+constexpr long kMaxPoints = 1 << 21;  // 16 MB of (Re, Im) floats per call
+constexpr int kMaxCurves = 1 << 19;   // 16 MB of curve texels per call
+constexpr int kStateChunk = 4096;
+int g_replay_next = 0;
 double g_state[sv::expr::kNumVars];
 sv::ScrubHistory g_history;
 sv::Interpolated g_interp;
@@ -77,11 +84,14 @@ SV_API void sv_set_policy(int clamp) {
 
 SV_API int sv_grid_size() { return g_scene.grid_size(); }
 
-// Builds grid curves [first, first + count); returns count * kCurveFloats floats.
+SV_API int sv_max_curves() { return kMaxCurves; }
+
+// Builds grid curves [first, first + count), at most sv_max_curves(); the
+// number built is in sv_stats()[0]. Returns kCurveFloats floats per curve.
 SV_API float* sv_build_grid(int first, int count) {
     int n = g_scene.grid_size();
     first = std::clamp(first, 0, n);
-    count = std::clamp(count, 0, n - first);
+    count = std::clamp(count, 0, std::min(n - first, kMaxCurves));
     g_curves.resize(static_cast<size_t>(std::max(count, 1)) * sv::kCurveFloats);
     set_stats(g_scene.build_grid(first, count, g_curves.data()));
     return g_curves.data();
@@ -108,12 +118,44 @@ SV_API int sv_scrub_push(double t0, double t1, int m, double max_step) {
     return build_interp();
 }
 
-// Rebuilds the curves for keys [k0, k1) at a new max_step.
+// Rebuilds the curves for keys [k0, k1) at a new max_step, stopping at a
+// key boundary near sv_max_curves(); continue from sv_scrub_replay_next().
 SV_API int sv_scrub_replay(int k0, int k1, double t0, double t1, int m, double max_step) {
     g_interp.clear();
-    g_history.replay(g_scene, k0, k1, {t0, t1, m}, max_step, g_interp);
+    g_replay_next = g_history.replay(g_scene, k0, k1, {t0, t1, m}, max_step, g_interp, kMaxCurves - (1 << sv::kMaxBisection));
     return build_interp();
 }
 
+SV_API int sv_scrub_replay_next() { return g_replay_next; }
+
 // Key index of each curve from the last push or replay.
 SV_API const int* sv_scrub_curve_keys() { return g_interp.keys.data(); }
+
+SV_API int sv_max_points() { return static_cast<int>(kMaxPoints); }
+
+// CPU path: (Re, Im) of grid curves [first, first + count) at m samples of
+// [t0, t1], curve-major. nullptr if count * m exceeds sv_max_points().
+SV_API float* sv_points_grid(int first, int count, double t0, double t1, int m) {
+    int n = g_scene.grid_size();
+    first = std::clamp(first, 0, n);
+    count = std::clamp(count, 0, n - first);
+    if (m < 1 || static_cast<long>(count) * m > kMaxPoints) return nullptr;
+    g_points.resize(static_cast<size_t>(std::max(count * m, 1)) * 2);
+    for (int c0 = 0; c0 < count; c0 += kStateChunk) {
+        int k = std::min(kStateChunk, count - c0);
+        g_grid_states.resize(k);
+        for (int i = 0; i < k; ++i) g_grid_states[i] = g_scene.grid_state(first + c0 + i);
+        sv::generate_points(g_scene, g_grid_states.data(), k, {t0, t1, m},
+                            g_points.data() + static_cast<size_t>(c0) * m * 2);
+    }
+    return g_points.data();
+}
+
+// Same for the curves of the last scrub push or replay.
+SV_API float* sv_points_scrub(double t0, double t1, int m) {
+    int count = static_cast<int>(g_interp.states.size());
+    if (m < 1 || static_cast<long>(count) * m > kMaxPoints) return nullptr;
+    g_points.resize(static_cast<size_t>(std::max(count * m, 1)) * 2);
+    sv::generate_points(g_scene, g_interp.states.data(), count, {t0, t1, m}, g_points.data());
+    return g_points.data();
+}

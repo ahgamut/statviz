@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "statviz/scene.hpp"
@@ -38,8 +39,11 @@ public:
     // Appends key; out gets the states to draw, ending with key itself.
     void push(const Scene& sc, const State& key, const TRange& ts, double max_step, Interpolated& out);
 
-    // Re-interpolates keys [k0, k1) (k1 clamped to size()); out is appended to.
-    void replay(const Scene& sc, int k0, int k1, const TRange& ts, double max_step, Interpolated& out) const;
+    // Re-interpolates keys [k0, k1) (k1 clamped to size()), appending to out.
+    // Stops early, at a key boundary, once out holds max_states or more
+    // (always taking at least one key). Returns the next key to replay.
+    int replay(const Scene& sc, int k0, int k1, const TRange& ts, double max_step, Interpolated& out,
+               size_t max_states = SIZE_MAX) const;
 
 private:
     std::vector<State> keys_;
