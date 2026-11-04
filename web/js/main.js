@@ -2,6 +2,7 @@ import { loadEngine } from './engine.js';
 import { createRenderer } from './render.js';
 import { SLIDER_VARS, createStore, defaultState } from './state.js';
 import { createPanel } from './ui/panel.js';
+import { attachViewControls } from './ui/viewctl.js';
 
 function showError(err) {
   const el = document.getElementById('error');
@@ -57,6 +58,7 @@ async function main() {
   };
 
   const panel = createPanel(document.getElementById('panel'), { meta, store, actions });
+  attachViewControls(canvas, store);
 
   let frame = 0;
   const requestDraw = () => { frame ||= requestAnimationFrame(draw); };
