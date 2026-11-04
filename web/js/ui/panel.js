@@ -17,7 +17,7 @@ export function createPanel(root, { meta, store, actions }) {
     ['scrub', 'Scrub', 'One curve following the sliders'],
     ['animate', 'Animate', 'Not available yet'],
     ['render', 'Render', 'Every curve of the u, v grid'],
-  ], { disabled: ['scrub', 'animate'] });
+  ], { disabled: ['animate'] });
 
   // Distribution
   const familySelect = h('select', { on: { change: () => actions.setFamily(familySelect.value) } },

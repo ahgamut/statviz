@@ -4,6 +4,8 @@ import { createEvaluator } from './gl/evaluate.js';
 import { createLines } from './gl/lines.js';
 import { createOverlay } from './gl/overlay.js';
 import { createParams } from './gl/params.js';
+import { createTrailTools } from './gl/trail.js';
+import { createScrub } from './scrub.js';
 
 export const SCALE = 0.9;              // unit disk radius in clip space at zoom 1
 const MAX_DRAW_POINTS = 64 * 2 ** 20;  // per frame, across batches
@@ -18,8 +20,8 @@ export function viewTransform({ cx, cy, zoom }, w, h) {
 
 export async function createRenderer(gl, engine) {
   const colormaps = createColormaps(gl);
-  const [lines, overlay, evaluator] = await Promise.all([
-    createLines(gl, colormaps), createOverlay(gl), createEvaluator(gl),
+  const [lines, overlay, evaluator, trails] = await Promise.all([
+    createLines(gl, colormaps), createOverlay(gl), createEvaluator(gl), createTrailTools(gl),
   ]);
   const params = createParams(gl);
   const grid = { family: 0, total: 0, slab: -1, evaluated: false, T: null };
@@ -71,8 +73,18 @@ export async function createRenderer(gl, engine) {
     return total;
   }
 
+  const scrub = createScrub(gl, engine, {
+    lines, evaluator, trails, lineStyle, blend, family: () => grid.family,
+  });
+
   return {
     colormaps,
+    scrub,
+
+    setFamily(family) {
+      grid.family = family;
+      grid.evaluated = false;
+    },
 
     // After the engine's scene changed: rebuilds the grid's first slab and
     // returns its stats.
@@ -89,11 +101,15 @@ export async function createRenderer(gl, engine) {
     // Points must be re-evaluated (t range changed) but params are still valid.
     invalidatePoints() { grid.evaluated = false; },
 
-    // Returns {drawn} curve count for the status line.
+    // Returns {drawn, limited} for the grid and busy while more frames are needed.
     draw(state, w, h) {
       clear(state, w, h);
+      if (state.mode === 'scrub') {
+        grid.evaluated = false;  // the evaluator's points are reused
+        return { busy: scrub.draw(state, w, h) };
+      }
       const drawn = state.mode === 'render' ? drawGrid(state, w, h) : 0;
-      return { drawn, limited: drawn < grid.total };
+      return { drawn, limited: drawn < grid.total, busy: false };
     },
   };
 }

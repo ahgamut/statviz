@@ -43,7 +43,18 @@ async function main() {
       const r = s[axis];
       engine.setSweep(axis, r.lo, r.hi, info.varsUsed.has(axis) ? r.n : 1);
     }
-    info.stats = s.mode === 'render' ? renderer.setGrid(family.id) : null;
+    if (s.mode === 'render') {
+      info.stats = renderer.setGrid(family.id);
+    } else {
+      renderer.setFamily(family.id);
+      renderer.scrub.reset();
+      if (s.mode === 'scrub') pushScrub();
+    }
+  }
+
+  function pushScrub() {
+    renderer.scrub.push(store.state, canvas.width, canvas.height);
+    info.stats = renderer.scrub.stats;
   }
 
   const actions = {
@@ -54,20 +65,31 @@ async function main() {
       store.set('family', key);
       store.set('exprs', familyExprs.get(key) ?? family.params.map((p) => String(p.default)));
     },
-    clearTrail() {},
+    clearTrail() {
+      if (store.state.mode !== 'scrub') return;
+      renderer.scrub.reset();
+      pushScrub();
+      requestDraw();
+    },
   };
 
   const panel = createPanel(document.getElementById('panel'), { meta, store, actions });
   attachViewControls(canvas, store);
+  window.statviz = { store, engine, renderer };  // for the console
 
   let frame = 0;
   const requestDraw = () => { frame ||= requestAnimationFrame(draw); };
   function draw() {
     frame = 0;
     const s = store.state;
-    const { drawn, limited } = renderer.draw(s, canvas.width, canvas.height);
+    const { drawn, limited, busy } = renderer.draw(s, canvas.width, canvas.height);
+    if (busy) requestDraw();
     const total = engine.gridSize();
-    if (s.mode === 'render') {
+    if (s.mode === 'scrub') {
+      const keys = engine.scrubSize();
+      info.status = s.trail.mode === 'refresh' ? 'one curve'
+        : `${keys.toLocaleString()} slider state${keys === 1 ? '' : 's'} in the trail` + (busy ? ' · redrawing…' : '');
+    } else if (s.mode === 'render') {
       info.status = `${total.toLocaleString()} curves × ${s.t.n.toLocaleString()} samples`
         + (info.stats && info.stats.valid < Math.min(total, engine.maxCurves) ? ` · ${(Math.min(total, engine.maxCurves) - info.stats.valid).toLocaleString()} skipped` : '')
         + (limited ? ` · drawing the first ${drawn.toLocaleString()}` : '');
@@ -78,12 +100,18 @@ async function main() {
   store.subscribe((paths) => {
     const has = (prefix) => [...paths].some((p) => p === '*' || p.startsWith(prefix));
     if (has('style.custom')) renderer.colormaps.setCustom(store.state.style.custom.map((c, i) => [i / 2, c]));
-    if (['family', 'exprs', 'policy', 'u.', 'v.', 'vars.', 'mode'].some(has)) applyScene();
+    const scrub = store.state.mode === 'scrub';
+    const all = (re) => [...paths].every((p) => re.test(p));
+    const scene = ['family', 'exprs', 'policy', 'u.', 'v.', 'vars.', 'mode'].some(has);
+    if (scrub && all(/^(u|v)\.value$|^vars\.\w+\.value$/)) pushScrub();
+    else if (scrub && all(/^vars\.\w+\.(lo|hi)$/)) { /* slider ranges only */ }
+    else if (scene || (scrub && (has('t.') || has('trail.mode')))) applyScene();
     else if (has('t.')) renderer.invalidatePoints();
     panel.update(store.state, info);
     requestDraw();
   });
 
+  renderer.colormaps.setCustom(store.state.style.custom.map((c, i) => [i / 2, c]));
   applyScene();
   panel.update(store.state, info);
 
