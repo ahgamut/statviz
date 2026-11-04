@@ -4,7 +4,8 @@ export async function loadText(url) {
   return res.text();
 }
 
-export function compileProgram(gl, vsSource, fsSource) {
+// options.varyings: transform-feedback outputs (interleaved).
+export function compileProgram(gl, vsSource, fsSource, { varyings } = {}) {
   const shader = (type, src) => {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
@@ -21,6 +22,7 @@ export function compileProgram(gl, vsSource, fsSource) {
   const p = gl.createProgram();
   gl.attachShader(p, vs);
   gl.attachShader(p, fs);
+  if (varyings) gl.transformFeedbackVaryings(p, varyings, gl.INTERLEAVED_ATTRIBS);
   gl.linkProgram(p);
   gl.deleteShader(vs);
   gl.deleteShader(fs);
@@ -30,9 +32,19 @@ export function compileProgram(gl, vsSource, fsSource) {
   return p;
 }
 
-export async function loadProgram(gl, vsUrl, fsUrl) {
-  const [vs, fs] = await Promise.all([loadText(vsUrl), loadText(fsUrl)]);
-  return compileProgram(gl, vs, fs);
+// Shader source with `#include "file"` lines replaced, relative to url.
+export async function loadShader(url) {
+  const src = await loadText(url);
+  const parts = await Promise.all(src.split('\n').map((line) => {
+    const m = line.match(/^\s*#include\s+"([^"]+)"/);
+    return m ? loadShader(new URL(m[1], url)) : line;
+  }));
+  return parts.join('\n');
+}
+
+export async function loadProgram(gl, vsUrl, fsUrl, options) {
+  const [vs, fs] = await Promise.all([loadShader(vsUrl), loadShader(fsUrl)]);
+  return compileProgram(gl, vs, fs, options);
 }
 
 export function uniforms(gl, program, names) {
@@ -40,3 +52,5 @@ export function uniforms(gl, program, names) {
   for (const n of names) u[n] = gl.getUniformLocation(program, n);
   return u;
 }
+
+export const shaderUrl = (name) => new URL(`../../shaders/${name}`, import.meta.url);

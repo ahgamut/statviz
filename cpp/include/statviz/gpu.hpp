@@ -15,7 +15,8 @@ inline constexpr int kCurveFloats = kTexelsPerCurve * 4;
 //   gamma         (k, theta)               chi_squared  (k/2, 2)      [gamma layout]
 //   uniform       ((a+b)/2, (b-a)/2)       laplace      (mu, b^2)
 //   cauchy        (x0, gamma)              logistic     (mu, pi s)
-//   stable        (alpha, beta*T, gamma, delta), T = tan(pi alpha/2), or 2/pi at alpha = 1
+//   stable        (1 - alpha, beta*T, gamma, delta), T = tan(pi alpha/2), or 2/pi at alpha = 1
+//                 (1 - alpha rounds better to float than alpha near 1)
 //   bernoulli     (p)                      binomial     (n, p)
 //   poisson       (lambda)                 geometric    (p)
 //   neg_binomial  (r, p)                   discrete_uniform ((a+b)/2, b-a+1)

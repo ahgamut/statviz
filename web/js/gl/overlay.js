@@ -1,7 +1,6 @@
 // Unit circle and axes, drawn under the curves in the preview.
-import { loadProgram, uniforms } from './util.js';
+import { loadProgram, uniforms, shaderUrl as shader } from './util.js';
 
-const shader = (name) => new URL(`../../shaders/${name}`, import.meta.url);
 const SEGMENTS = 256;
 
 export async function createOverlay(gl) {

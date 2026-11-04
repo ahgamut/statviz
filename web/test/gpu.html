@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>statviz — GPU vs CPU check</title>
+  <style>
+    body { background: #0d0e10; color: #c9ccd1; font: 13px/1.4 ui-monospace, monospace; padding: 1rem; }
+    td, th { padding: 0.1rem 0.8rem; text-align: right; }
+    td:first-child, th:first-child { text-align: left; }
+    .fail { color: #ff8a80; } .ok { color: #9ccc65; }
+  </style>
+</head>
+<body>
+  <h1>φ(t): GLSL (float32) vs C++ (double)</h1>
+  <p id="info"></p>
+  <table id="out"><tr><th>case</th><th>curves</th><th>max err</th><th>tolerance</th><th>worst at</th></tr></table>
+  <script type="module" src="gpu.js"></script>
+</body>
+</html>

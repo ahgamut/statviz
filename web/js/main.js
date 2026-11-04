@@ -1,5 +1,7 @@
 import { loadEngine } from './engine.js';
 import { createCurves } from './gl/curves.js';
+import { createEvaluator } from './gl/evaluate.js';
+import { createParams } from './gl/params.js';
 import { createOverlay } from './gl/overlay.js';
 
 const SCENE = {
@@ -34,21 +36,25 @@ async function main() {
   const gl = canvas.getContext('webgl2', { antialias: true });
   if (!gl) throw new Error('WebGL2 is not available in this browser.');
 
-  const [engine, curves, overlay] = await Promise.all([
+  const [engine, curves, overlay, evaluator] = await Promise.all([
     loadEngine(),
     createCurves(gl),
     createOverlay(gl),
+    createEvaluator(gl),
   ]);
 
   const { data, stats } = buildScene(engine);
-  curves.setParams(data, stats.curves);
+  const params = createParams(gl);
+  params.set(data, stats.curves);
+  const family = engine.meta.families.find((f) => f.key === SCENE.family).id;
+  evaluator.evaluate(params, family, 0, stats.curves, SCENE);
 
   const draw = () => {
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     overlay.draw({ scale: SCALE });
-    curves.draw({ t0: SCENE.t0, t1: SCENE.t1, samples: SCENE.samples, scale: SCALE });
+    curves.draw({ params, points: evaluator.texture, count: stats.curves, samples: SCENE.samples, scale: SCALE });
   };
 
   const resize = new ResizeObserver(([entry]) => {

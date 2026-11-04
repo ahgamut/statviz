@@ -18,7 +18,7 @@ void pack_family(const Family& f, const double* p, float* texel) {
         case FamilyId::Logistic: t[0] = p[0]; t[1] = std::numbers::pi * p[1]; break;
         case FamilyId::Stable: {
             double T = p[0] == 1.0 ? 2.0 / std::numbers::pi : std::tan(0.5 * std::numbers::pi * p[0]);
-            t[0] = p[0]; t[1] = p[1] * T; t[2] = p[2]; t[3] = p[3];
+            t[0] = 1.0 - p[0]; t[1] = p[1] * T; t[2] = p[2]; t[3] = p[3];
             break;
         }
         case FamilyId::Bernoulli: t[0] = p[0]; break;

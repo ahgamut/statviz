@@ -154,10 +154,12 @@ TEST_CASE("pack_family writes the documented layouts") {
     pack(FamilyId::Logistic, {0.5, 2});
     CHECK(t[1] == doctest::Approx(2 * std::numbers::pi));
     pack(FamilyId::Stable, {1.5, 0.5, 2, -1});
+    CHECK(t[0] == -0.5f);
     CHECK(t[1] == doctest::Approx(0.5 * std::tan(0.75 * std::numbers::pi)));
     CHECK(t[2] == 2.0f);
     CHECK(t[3] == -1.0f);
     pack(FamilyId::Stable, {1, 0.5, 2, -1});
+    CHECK(t[0] == 0.0f);
     CHECK(t[1] == doctest::Approx(0.5 * 2 / std::numbers::pi));
     pack(FamilyId::DiscreteUniform, {-2, 4});
     CHECK(t[0] == 1.0f);
