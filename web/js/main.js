@@ -2,7 +2,12 @@ import { loadEngine } from './engine.js';
 import { createCurves } from './gl/curves.js';
 import { createOverlay } from './gl/overlay.js';
 
-const SCENE = { mu: 1, sigma0: 0.02, sigma1: 0.12, curves: 12, t0: 0, t1: 60, samples: 4000 };
+const SCENE = {
+  family: 'normal',
+  params: ['1', '0.02 + 0.1*u'],
+  u: { lo: 0, hi: 1, n: 12 },
+  t0: 0, t1: 60, samples: 4000,
+};
 const SCALE = 0.9;  // unit disk radius in clip space
 
 function showError(err) {
@@ -10,6 +15,18 @@ function showError(err) {
   el.textContent = String(err?.message ?? err);
   el.hidden = false;
   console.error(err);
+}
+
+function buildScene(engine) {
+  const family = engine.meta.families.find((f) => f.key === SCENE.family);
+  engine.setFamily(family.id);
+  SCENE.params.forEach((src, i) => {
+    const err = engine.setParam(i, src);
+    if (err) throw new Error(`${family.params[i].name} = ${src}: ${err.message} (at ${err.pos})`);
+  });
+  engine.setSweep('u', SCENE.u.lo, SCENE.u.hi, SCENE.u.n);
+  engine.setSweep('v', 0, 0, 1);
+  return engine.buildGrid();
 }
 
 async function main() {
@@ -23,7 +40,8 @@ async function main() {
     createOverlay(gl),
   ]);
 
-  curves.setParams(engine.normalSweep(SCENE.mu, SCENE.sigma0, SCENE.sigma1, SCENE.curves), SCENE.curves);
+  const { data, stats } = buildScene(engine);
+  curves.setParams(data, stats.curves);
 
   const draw = () => {
     gl.viewport(0, 0, canvas.width, canvas.height);
