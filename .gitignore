@@ -256,3 +256,6 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# statviz build output
+web/wasm/

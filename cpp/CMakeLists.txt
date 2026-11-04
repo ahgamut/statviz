@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.20)
+project(statviz CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+add_library(statviz_core STATIC src/params.cpp)
+target_include_directories(statviz_core PUBLIC include)
+target_compile_options(statviz_core PRIVATE -Wall -Wextra -Wpedantic)
+if(EMSCRIPTEN)
+  target_compile_options(statviz_core PUBLIC -msimd128)
+endif()
+
+# Tests run natively, and under node for the WebAssembly build
+# (Emscripten's toolchain sets CMAKE_CROSSCOMPILING_EMULATOR).
+enable_testing()
+add_executable(statviz_tests tests/main.cpp tests/test_cf.cpp tests/test_params.cpp)
+target_link_libraries(statviz_tests PRIVATE statviz_core)
+target_include_directories(statviz_tests SYSTEM PRIVATE third_party/doctest)
+add_test(NAME statviz_tests COMMAND statviz_tests)
+
+if(EMSCRIPTEN)
+  set(SV_WASM_OUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../web/wasm" CACHE PATH
+      "Where the browser module (statviz.js + statviz.wasm) is written")
+  add_executable(statviz src/api.cpp)
+  target_link_libraries(statviz PRIVATE statviz_core)
+  set_target_properties(statviz PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${SV_WASM_OUT_DIR}")
+  target_link_options(statviz PRIVATE
+    --no-entry
+    -sMODULARIZE
+    -sEXPORT_ES6
+    -sENVIRONMENT=web
+    -sALLOW_MEMORY_GROWTH=0
+    -sINITIAL_MEMORY=64MB
+    -sEXPORTED_RUNTIME_METHODS=HEAPF32)
+endif()
