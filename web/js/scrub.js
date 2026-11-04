@@ -46,7 +46,7 @@ export function createScrub(gl, engine, { lines, evaluator, trails, targets, fam
       const m = Math.min(per, n - c);
       evaluator.evaluate(batch, family(), c, m, t);
       target.bind();
-      blend(s.style.blend);
+      blend();
       lines.draw({ params: batch, points: evaluator.texture, first: c, count: m, samples: t.samples,
         view, viewport: [target.w, target.h], style, fade: [k, n - c] });
     }
@@ -128,9 +128,7 @@ export function createScrub(gl, engine, { lines, evaluator, trails, targets, fam
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
         if (targets.front.key) {
-          gl.enable(gl.BLEND);
-          if (s.style.blend === 'add') gl.blendFunc(gl.ONE, gl.ONE);
-          else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          blend();
           trails.composite(targets.front, view);
         }
       }
@@ -139,7 +137,7 @@ export function createScrub(gl, engine, { lines, evaluator, trails, targets, fam
         evaluator.evaluate(current, family(), 0, 1, t);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, w, h);
-        blend(s.style.blend);
+        blend();
         lines.draw({ params: current, points: evaluator.texture, count: 1, samples: t.samples,
           view, viewport: [w, h], style: lineStyle(s.style, w, h) });
       }

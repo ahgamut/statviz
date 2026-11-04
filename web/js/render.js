@@ -35,10 +35,10 @@ export async function createRenderer(gl, engine) {
 
   const lineStyle = (style, w, h) => ({ ...style, width: (style.width * Math.min(w, h)) / 1000 });
 
-  function blend(mode) {
+  // Premultiplied 'over'.
+  function blend() {
     gl.enable(gl.BLEND);
-    if (mode === 'add') gl.blendFunc(gl.ONE, gl.ONE);
-    else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
 
   function clear(state, w, h) {
@@ -80,7 +80,7 @@ export async function createRenderer(gl, engine) {
           if (evaluator.tag !== tag) evaluator.evaluate(params, grid.family, c, m, T, tag);
           const k = Math.min(chunk, m - d);
           target.bind();
-          blend(s.style.blend);
+          blend();
           lines.draw({ params, points: evaluator.texture, first: c + d, offset: d, count: k,
             samples: T.samples, view: target.view, viewport: [target.w, target.h], style });
           progress.done = slab + c + d + k;
@@ -117,7 +117,7 @@ export async function createRenderer(gl, engine) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, w, h);
     if (shown === back || shown.key) {
-      blend(s.style.blend);
+      blend();
       trails.composite(shown, viewTransform(s.view, w, h));
     }
     return !!job && !job.paused;
@@ -192,8 +192,7 @@ export async function createRenderer(gl, engine) {
         if (circle) {
           image.bind();
           gl.enable(gl.BLEND);
-          if (s.style.blend === 'add') gl.blendFunc(gl.ONE, gl.ONE);
-          else gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.ONE);
+          gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.ONE);  // destination over
           overlay.draw({ view: image.view, axes: false });
         }
 
@@ -204,7 +203,7 @@ export async function createRenderer(gl, engine) {
         gl.viewport(0, 0, w, h);
         gl.disable(gl.BLEND);
         const bg = transparent ? [0, 0, 0, 0] : [...hexColor(s.style.background), 1];
-        trails.flatten(image, bg, s.style.blend === 'add');
+        trails.flatten(image, bg);
         gl.enable(gl.BLEND);
       } catch (err) {
         release();

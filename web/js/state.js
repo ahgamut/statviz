@@ -27,7 +27,6 @@ export function defaultState() {
       colormap: 'magma',
       reverse: false,
       custom: ['#1b1f3a', '#e85d75', '#ffd166'],
-      blend: 'over',         // over | add
       background: '#0d0e10',
       overlay: true,
       repeat: { n: 1, angle: 0 },  // copies turned by angle (radians); angle 0 draws one
